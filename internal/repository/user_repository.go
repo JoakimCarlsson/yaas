@@ -6,7 +6,6 @@ type User struct {
 	ID         string
 	Email      string
 	Password   string
-	Salt       string
 	FirstName  string
 	LastName   string
 	IsActive   bool

@@ -3,8 +3,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) UNIQUE,
-    password VARCHAR(255),
-    salt VARCHAR(255),
+    password TEXT NOT NULL,
     first_name VARCHAR(100),
     last_name VARCHAR(100),
     is_active BOOLEAN DEFAULT TRUE,
@@ -16,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (provider, provider_id),
     CONSTRAINT chk_authentication_method CHECK (
-        (provider = 'password' AND password IS NOT NULL AND salt IS NOT NULL AND provider_id IS NULL) OR
-        (provider != 'password' AND password IS NULL AND salt IS NULL AND provider_id IS NOT NULL)
+        (provider = 'password' AND password IS NOT NULL AND provider_id IS NULL) OR
+        (provider != 'password' AND password IS NULL AND provider_id IS NOT NULL)
     )
 );
