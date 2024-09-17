@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/joakimcarlsson/yaas/internal/models"
 	"github.com/joakimcarlsson/yaas/internal/repository"
 )
 
@@ -33,7 +34,7 @@ func (r *userRoleRepositoryPostgres) RemoveRoleFromUser(ctx context.Context, use
 	return err
 }
 
-func (r *userRoleRepositoryPostgres) GetRolesByUserID(ctx context.Context, userID string) ([]*repository.Role, error) {
+func (r *userRoleRepositoryPostgres) GetRolesByUserID(ctx context.Context, userID string) ([]*models.Role, error) {
 	query := `
         SELECT r.id, r.name, r.description, r.created_at, r.updated_at
         FROM roles r
@@ -46,9 +47,9 @@ func (r *userRoleRepositoryPostgres) GetRolesByUserID(ctx context.Context, userI
 	}
 	defer rows.Close()
 
-	roles := []*repository.Role{}
+	roles := []*models.Role{}
 	for rows.Next() {
-		role := &repository.Role{}
+		role := &models.Role{}
 		err := rows.Scan(&role.ID, &role.Name, &role.Description, &role.CreatedAt, &role.UpdatedAt)
 		if err != nil {
 			return nil, err

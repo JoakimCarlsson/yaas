@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/joakimcarlsson/yaas/internal/models"
 	"github.com/joakimcarlsson/yaas/internal/repository"
 )
 
@@ -16,7 +17,7 @@ func NewUserRepository(db *sql.DB) repository.UserRepository {
 	return &userRepositoryPostgres{db: db}
 }
 
-func (r *userRepositoryPostgres) CreateUser(ctx context.Context, user *repository.User) error {
+func (r *userRepositoryPostgres) CreateUser(ctx context.Context, user *models.User) error {
 	query := `
         INSERT INTO users (
             email, password, first_name, last_name, is_active,
@@ -33,13 +34,13 @@ func (r *userRepositoryPostgres) CreateUser(ctx context.Context, user *repositor
 	return err
 }
 
-func (r *userRepositoryPostgres) GetUserByID(ctx context.Context, id string) (*repository.User, error) {
+func (r *userRepositoryPostgres) GetUserByID(ctx context.Context, id string) (*models.User, error) {
 	query := `
         SELECT id, email, password, first_name, last_name, is_active,
                is_verified, provider, provider_id, last_login, created_at, updated_at
         FROM users WHERE id = $1
     `
-	user := &repository.User{}
+	user := &models.User{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&user.ID, &user.Email, &user.Password, &user.FirstName, &user.LastName,
 		&user.IsActive, &user.IsVerified, &user.Provider, &user.ProviderID, &user.LastLogin,
@@ -51,13 +52,13 @@ func (r *userRepositoryPostgres) GetUserByID(ctx context.Context, id string) (*r
 	return user, err
 }
 
-func (r *userRepositoryPostgres) GetUserByEmail(ctx context.Context, email string) (*repository.User, error) {
+func (r *userRepositoryPostgres) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	query := `
         SELECT id, email, password, first_name, last_name, is_active,
                is_verified, provider, provider_id, last_login, created_at, updated_at
         FROM users WHERE email = $1
     `
-	user := &repository.User{}
+	user := &models.User{}
 	err := r.db.QueryRowContext(ctx, query, email).Scan(
 		&user.ID, &user.Email, &user.Password, &user.FirstName, &user.LastName,
 		&user.IsActive, &user.IsVerified, &user.Provider, &user.ProviderID, &user.LastLogin,
@@ -69,7 +70,7 @@ func (r *userRepositoryPostgres) GetUserByEmail(ctx context.Context, email strin
 	return user, err
 }
 
-func (r *userRepositoryPostgres) UpdateUser(ctx context.Context, user *repository.User) error {
+func (r *userRepositoryPostgres) UpdateUser(ctx context.Context, user *models.User) error {
 	query := `
         UPDATE users SET
             email = $1,

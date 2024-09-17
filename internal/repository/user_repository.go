@@ -1,26 +1,15 @@
 package repository
 
-import "context"
+import (
+	"context"
 
-type User struct {
-	ID         string
-	Email      string
-	Password   string
-	FirstName  string
-	LastName   string
-	IsActive   bool
-	IsVerified bool
-	Provider   string
-	ProviderID *string
-	LastLogin  *string
-	CreatedAt  string
-	UpdatedAt  string
-}
+	"github.com/joakimcarlsson/yaas/internal/models"
+)
 
 type UserRepository interface {
-	CreateUser(ctx context.Context, user *User) error
-	GetUserByID(ctx context.Context, id string) (*User, error)
-	GetUserByEmail(ctx context.Context, email string) (*User, error)
-	UpdateUser(ctx context.Context, user *User) error
+	CreateUser(ctx context.Context, user *models.User) error
+	GetUserByID(ctx context.Context, id string) (*models.User, error)
+	GetUserByEmail(ctx context.Context, email string) (*models.User, error)
+	UpdateUser(ctx context.Context, user *models.User) error
 	DeleteUser(ctx context.Context, id string) error
 }

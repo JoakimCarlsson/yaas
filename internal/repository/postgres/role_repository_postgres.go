@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/joakimcarlsson/yaas/internal/models"
 	"github.com/joakimcarlsson/yaas/internal/repository"
 )
 
@@ -16,7 +17,7 @@ func NewRoleRepository(db *sql.DB) repository.RoleRepository {
 	return &roleRepositoryPostgres{db: db}
 }
 
-func (r *roleRepositoryPostgres) CreateRole(ctx context.Context, role *repository.Role) error {
+func (r *roleRepositoryPostgres) CreateRole(ctx context.Context, role *models.Role) error {
 	query := `
         INSERT INTO roles (
             name, description, created_at, updated_at
@@ -28,12 +29,12 @@ func (r *roleRepositoryPostgres) CreateRole(ctx context.Context, role *repositor
 	return err
 }
 
-func (r *roleRepositoryPostgres) GetRoleByID(ctx context.Context, id int) (*repository.Role, error) {
+func (r *roleRepositoryPostgres) GetRoleByID(ctx context.Context, id int) (*models.Role, error) {
 	query := `
         SELECT id, name, description, created_at, updated_at
         FROM roles WHERE id = $1
     `
-	role := &repository.Role{}
+	role := &models.Role{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&role.ID, &role.Name, &role.Description, &role.CreatedAt, &role.UpdatedAt,
 	)
@@ -43,12 +44,12 @@ func (r *roleRepositoryPostgres) GetRoleByID(ctx context.Context, id int) (*repo
 	return role, err
 }
 
-func (r *roleRepositoryPostgres) GetRoleByName(ctx context.Context, name string) (*repository.Role, error) {
+func (r *roleRepositoryPostgres) GetRoleByName(ctx context.Context, name string) (*models.Role, error) {
 	query := `
         SELECT id, name, description, created_at, updated_at
         FROM roles WHERE name = $1
     `
-	role := &repository.Role{}
+	role := &models.Role{}
 	err := r.db.QueryRowContext(ctx, query, name).Scan(
 		&role.ID, &role.Name, &role.Description, &role.CreatedAt, &role.UpdatedAt,
 	)
@@ -58,7 +59,7 @@ func (r *roleRepositoryPostgres) GetRoleByName(ctx context.Context, name string)
 	return role, err
 }
 
-func (r *roleRepositoryPostgres) UpdateRole(ctx context.Context, role *repository.Role) error {
+func (r *roleRepositoryPostgres) UpdateRole(ctx context.Context, role *models.Role) error {
 	query := `
         UPDATE roles SET
             name = $1,
