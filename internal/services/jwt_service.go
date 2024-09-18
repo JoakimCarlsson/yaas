@@ -28,8 +28,11 @@ func NewJWTService(cfg *config.Config) JWTService {
 func (s *jwtService) GenerateAccessToken(user *models.User) (string, error) {
 	claims := jwt.MapClaims{
 		"sub": user.ID,
+		"iss": s.config.BaseURL,
+		"aud": s.config.BaseURL,
 		"exp": time.Now().Add(s.config.JWTAccessTokenExpiry).Unix(),
 		"iat": time.Now().Unix(),
+		"nbf": time.Now().Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
