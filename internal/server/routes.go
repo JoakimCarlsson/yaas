@@ -4,13 +4,16 @@ import (
 	"net/http"
 
 	"github.com/joakimcarlsson/yaas/internal/handlers"
+	"github.com/joakimcarlsson/yaas/internal/middleware"
+	"golang.org/x/time/rate"
 )
 
 func NewRouter(authHandler *handlers.AuthHandler) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/register", authHandler.Register)
-	mux.HandleFunc("/login", authHandler.Login)
+	limiter := middleware.NewIPRateLimiter(rate.Limit(1), 1)
+	mux.HandleFunc("/register", middleware.RateLimitMiddleware(limiter)(authHandler.Register))
+	mux.HandleFunc("/login", middleware.RateLimitMiddleware(limiter)(authHandler.Login))
 
 	return mux
 }
