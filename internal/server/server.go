@@ -24,7 +24,8 @@ func NewServer(cfg *config.Config, db *sql.DB) *Server {
 	}
 
 	userRepo := postgres.NewUserRepository(db)
-	authService := services.NewAuthService(userRepo)
+	jwtService := services.NewJWTService(cfg)
+	authService := services.NewAuthService(userRepo, jwtService)
 	authHandler := handlers.NewAuthHandler(authService)
 
 	s.router = NewRouter(authHandler)

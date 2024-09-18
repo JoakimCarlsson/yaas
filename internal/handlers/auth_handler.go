@@ -57,17 +57,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.AuthService.Login(r.Context(), req.Email, req.Password)
+	_, accessToken, refreshToken, err := h.AuthService.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		utils.JSONError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 
 	utils.JSONResponse(w, http.StatusOK, map[string]interface{}{
-		"message": "Login successful",
-		"user": map[string]interface{}{
-			"id":    user.ID,
-			"email": user.Email,
-		},
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
 	})
 }
