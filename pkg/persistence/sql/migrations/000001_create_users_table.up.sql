@@ -4,8 +4,6 @@ CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) UNIQUE,
     password TEXT NOT NULL,
-    first_name VARCHAR(100),
-    last_name VARCHAR(100),
     is_active BOOLEAN DEFAULT TRUE,
     is_verified BOOLEAN DEFAULT FALSE,
     provider VARCHAR(50) NOT NULL DEFAULT 'password',

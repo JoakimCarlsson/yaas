@@ -5,6 +5,9 @@ import (
 	"net/http"
 
 	"github.com/joakimcarlsson/yaas/internal/config"
+	"github.com/joakimcarlsson/yaas/internal/handlers"
+	"github.com/joakimcarlsson/yaas/internal/repository/postgres"
+	"github.com/joakimcarlsson/yaas/internal/services"
 )
 
 type Server struct {
@@ -20,31 +23,14 @@ func NewServer(cfg *config.Config, db *sql.DB) *Server {
 		db:     db,
 	}
 
-	// s.routes()
+	userRepo := postgres.NewUserRepository(db)
+	authService := services.NewAuthService(userRepo)
+	authHandler := handlers.NewAuthHandler(authService)
+
+	s.router = NewRouter(authHandler)
 
 	return s
 }
-
-// func (s *Server) routes() {
-// 	userRepo := repository.NewPostgresUserRepository(s.db)
-// 	refreshTokenRepo := repository.NewPostgresRefreshTokenRepository(s.db)
-
-// 	authService := auth.NewAuthService(
-// 		refreshTokenRepo,
-// 		s.cfg.JWTAccessSecret,
-// 		s.cfg.JWTRefreshSecret,
-// 		time.Minute*15,
-// 		time.Hour*24*7,
-// 		s.cfg.BaseURL,
-// 		s.cfg.BaseURL,
-// 	)
-
-// 	userHandler := handlers.NewUserHandler(userRepo, authService)
-
-// 	s.router.HandleFunc("/login", userHandler.Login)
-// 	s.router.HandleFunc("/refresh-token", userHandler.RefreshToken)
-// 	s.router.HandleFunc("/register", userHandler.Register)
-// }
 
 func (s *Server) Start() error {
 	return http.ListenAndServe(":"+s.cfg.ServerPort, s.router)
