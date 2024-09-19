@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
+	"github.com/joakimcarlsson/yaas/internal/logger"
 )
 
 type contextKey string
@@ -55,7 +55,7 @@ func AuditLogMiddleware(next http.Handler) http.Handler {
 
 		ip := getClientIP(r)
 
-		logrus.WithFields(logrus.Fields{
+		logger.WithFields(logger.Fields{
 			"method":      r.Method,
 			"path":        r.URL.Path,
 			"status":      rw.status,

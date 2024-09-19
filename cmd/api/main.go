@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/joakimcarlsson/yaas/internal/config"
+	"github.com/joakimcarlsson/yaas/internal/logger"
 	"github.com/joakimcarlsson/yaas/internal/server"
 	"github.com/joakimcarlsson/yaas/pkg/persistence/sql"
 )
@@ -18,5 +19,5 @@ func main() {
 	defer db.Close()
 
 	srv := server.NewServer(cfg, db)
-	log.Fatal(srv.Start())
+	logger.GetLogger().Fatal(srv.Start())
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/joakimcarlsson/yaas/internal/config"
 	"github.com/joakimcarlsson/yaas/internal/handlers"
+	"github.com/joakimcarlsson/yaas/internal/logger"
 	"github.com/joakimcarlsson/yaas/internal/middleware"
 	"github.com/joakimcarlsson/yaas/internal/repository/postgres"
 	"github.com/joakimcarlsson/yaas/internal/services"
@@ -18,6 +19,8 @@ type Server struct {
 }
 
 func NewServer(cfg *config.Config, db *sql.DB) *Server {
+	logger.SetupLogger()
+
 	s := &Server{
 		cfg:    cfg,
 		router: http.NewServeMux(),
@@ -34,6 +37,7 @@ func NewServer(cfg *config.Config, db *sql.DB) *Server {
 	s.router = NewRouter(authHandler)
 
 	s.router = middleware.AuditLogMiddleware(s.router)
+	s.router = middleware.SecurityHeadersMiddleware(s.router)
 
 	return s
 }
