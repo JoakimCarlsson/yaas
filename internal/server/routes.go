@@ -16,6 +16,8 @@ func NewRouter(authHandler *handlers.AuthHandler) *http.ServeMux {
 	mux.HandleFunc("/login", limiter.RateLimit(authHandler.Login))
 	mux.HandleFunc("/refresh_token", limiter.RateLimit(authHandler.RefreshToken))
 	mux.HandleFunc("/logout", limiter.RateLimit(authHandler.Logout))
+	mux.HandleFunc("/auth/google/login", limiter.RateLimit(authHandler.GoogleLogin))
+	mux.HandleFunc("/auth/google/callback", limiter.RateLimit(authHandler.GoogleCallback))
 
 	return mux
 }

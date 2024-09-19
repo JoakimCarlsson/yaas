@@ -5,7 +5,7 @@ import "time"
 type User struct {
 	ID         string
 	Email      string
-	Password   string
+	Password   *string
 	IsActive   bool
 	IsVerified bool
 	Provider   string

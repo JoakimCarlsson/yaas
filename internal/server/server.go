@@ -31,8 +31,9 @@ func NewServer(cfg *config.Config, db *sql.DB) *Server {
 	refreshTokenRepo := postgres.NewRefreshTokenRepository(db)
 
 	jwtService := services.NewJWTService(cfg)
-	authService := services.NewAuthService(userRepo, refreshTokenRepo, jwtService)
-	authHandler := handlers.NewAuthHandler(authService)
+	oauthService := services.NewOAuth2Service(cfg)
+	authService := services.NewAuthService(userRepo, refreshTokenRepo, jwtService, oauthService)
+	authHandler := handlers.NewAuthHandler(authService, oauthService)
 
 	s.router = NewRouter(authHandler)
 

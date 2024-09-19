@@ -14,9 +14,12 @@ type Config struct {
 	JWTRefreshTokenExpiry time.Duration
 	ServerPort            string
 	BaseURL               string
+	GoogleClientID        string
+	GoogleClientSecret    string
+	GoogleRedirectURL     string
 }
 
-func Load() *Config { //ideally we want to load the configuration from a file, but for simplicity we will use environment variables
+func Load() *Config {
 	baseURL := os.Getenv("BASE_URL")
 	if baseURL == "" {
 		baseURL = fmt.Sprintf("http://localhost:%s", os.Getenv("SERVER_PORT"))
@@ -48,5 +51,8 @@ func Load() *Config { //ideally we want to load the configuration from a file, b
 		JWTRefreshTokenExpiry: refreshTokenExpiry,
 		ServerPort:            os.Getenv("SERVER_PORT"),
 		BaseURL:               baseURL,
+		GoogleClientID:        os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret:    os.Getenv("GOOGLE_CLIENT_SECRET"),
+		GoogleRedirectURL:     os.Getenv("GOOGLE_REDIRECT_URL"),
 	}
 }

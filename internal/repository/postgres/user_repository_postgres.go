@@ -19,14 +19,14 @@ func NewUserRepository(db *sql.DB) repository.UserRepository {
 
 func (r *userRepositoryPostgres) CreateUser(ctx context.Context, user *models.User) error {
 	query := `
-        INSERT INTO users (
-            email, password, is_active,
-            is_verified, provider, provider_id, last_login, created_at, updated_at
-        ) VALUES (
-            $1, $2, $3, $4, $5, $6,
-            $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-        ) RETURNING id
-    `
+		INSERT INTO users (
+			email, password, is_active,
+			is_verified, provider, provider_id, last_login, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			$7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+		) RETURNING id
+	`
 	err := r.db.QueryRowContext(ctx, query,
 		user.Email, user.Password,
 		user.IsActive, user.IsVerified, user.Provider, user.ProviderID, user.LastLogin,
@@ -72,17 +72,17 @@ func (r *userRepositoryPostgres) GetUserByEmail(ctx context.Context, email strin
 
 func (r *userRepositoryPostgres) UpdateUser(ctx context.Context, user *models.User) error {
 	query := `
-        UPDATE users SET
-            email = $1,
-            password = $2,
-            is_active = $3,
-            is_verified = $4,
-            provider = $5,
-            provider_id = $6,
-            last_login = $7,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $8
-    `
+		UPDATE users SET
+			email = $1,
+			password = $2,
+			is_active = $3,
+			is_verified = $4,
+			provider = $5,
+			provider_id = $6,
+			last_login = $7,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = $8
+	`
 	_, err := r.db.ExecContext(ctx, query,
 		user.Email, user.Password,
 		user.IsActive, user.IsVerified, user.Provider, user.ProviderID, user.LastLogin, user.ID,
