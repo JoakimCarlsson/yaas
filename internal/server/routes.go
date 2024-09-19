@@ -14,6 +14,8 @@ func NewRouter(authHandler *handlers.AuthHandler) *http.ServeMux {
 	limiter := middleware.NewIPRateLimiter(rate.Limit(1), 1)
 	mux.HandleFunc("/register", middleware.RateLimitMiddleware(limiter)(authHandler.Register))
 	mux.HandleFunc("/login", middleware.RateLimitMiddleware(limiter)(authHandler.Login))
+	mux.HandleFunc("/refresh_token", middleware.RateLimitMiddleware(limiter)(authHandler.RefreshToken))
+	mux.HandleFunc("/logout", middleware.RateLimitMiddleware(limiter)(authHandler.Logout))
 
 	return mux
 }

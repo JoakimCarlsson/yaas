@@ -64,7 +64,49 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.JSONResponse(w, http.StatusOK, map[string]interface{}{
-		"access_token":  accessToken,
-		"refresh_token": refreshToken,
+		"accessToken":  accessToken,
+		"refreshToken": refreshToken,
+	})
+}
+
+func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) { //ideally we should get it from headers / http only cookies
+	var req struct {
+		RefreshToken string `json:"refreshToken"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.JSONError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	newAccessToken, newRefreshToken, err := h.AuthService.RefreshToken(r.Context(), req.RefreshToken)
+	if err != nil {
+		utils.JSONError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	utils.JSONResponse(w, http.StatusOK, map[string]string{
+		"accessToken":  newAccessToken,
+		"refreshToken": newRefreshToken,
+	})
+}
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RefreshToken string `json:"refreshToken"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.JSONError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	if err := h.AuthService.Logout(r.Context(), req.RefreshToken); err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, "Failed to logout")
+		return
+	}
+
+	utils.JSONResponse(w, http.StatusOK, map[string]string{
+		"message": "Successfully logged out",
 	})
 }
