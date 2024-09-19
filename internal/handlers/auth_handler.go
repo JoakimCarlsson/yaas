@@ -127,11 +127,14 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
+
 	callbackURL := r.URL.Query().Get("callback_url")
 	if callbackURL == "" {
 		http.Error(w, "Callback URL is required", http.StatusBadRequest)
 		return
 	}
+
+	//validate callback url, and check that the domain is allowed
 
 	b := make([]byte, 16)
 	_, err := rand.Read(b)
@@ -148,7 +151,6 @@ func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	h.stateMutex.Unlock()
 
-	// Get the Google login URL with the state
 	googleURL := h.OAuth2Service.GetGoogleLoginURL(state)
 
 	http.Redirect(w, r, googleURL, http.StatusTemporaryRedirect)
@@ -163,7 +165,7 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	h.stateMutex.Lock()
 	data, exists := h.stateStore[state]
-	delete(h.stateStore, state) // Remove the used state
+	delete(h.stateStore, state)
 	h.stateMutex.Unlock()
 
 	if !exists || time.Now().After(data.Expiry) {
