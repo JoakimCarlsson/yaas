@@ -32,7 +32,9 @@ func NewServer(cfg *config.Config, db *sql.DB) *Server {
 
 	jwtService := services.NewJWTService(cfg)
 	oauthService := services.NewOAuth2Service(cfg)
-	authService := services.NewAuthService(userRepo, refreshTokenRepo, jwtService, oauthService)
+	emailService := services.NewEmailService(cfg)
+	tokenService := services.NewTokenService(cfg)
+	authService := services.NewAuthService(userRepo, refreshTokenRepo, jwtService, oauthService, emailService, tokenService)
 	authHandler := handlers.NewAuthHandler(authService, oauthService)
 
 	s.router = NewRouter(authHandler)

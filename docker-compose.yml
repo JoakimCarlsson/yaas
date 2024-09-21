@@ -18,6 +18,11 @@ services:
       POSTGRES_USER: "user"
       POSTGRES_PASSWORD: "password"
       POSTGRES_DB: "auth_db"
+      SMTP_HOST: "smtp.sendgrid.net"
+      SMTP_PORT: "587"
+      SMTP_USER: "apikey"
+      SMTP_PASSWORD: "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"
+      EMAIL_VERIFICATION_SECRET: "email_verification_secret"
 
   db:
     image: postgres:16

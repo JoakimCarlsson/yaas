@@ -26,14 +26,25 @@ type authService struct {
 	refreshTokenRepo repository.RefreshTokenRepository
 	jwtService       JWTService
 	oauth2Service    OAuth2Service
+	emailService     EmailService
+	tokenService     TokenService
 }
 
-func NewAuthService(userRepo repository.UserRepository, refreshRepo repository.RefreshTokenRepository, jwtService JWTService, oauth2Service OAuth2Service) AuthService {
+func NewAuthService(
+	userRepo repository.UserRepository,
+	refreshRepo repository.RefreshTokenRepository,
+	jwtService JWTService,
+	oauth2Service OAuth2Service,
+	emailService EmailService,
+	tokenService TokenService,
+) AuthService {
 	return &authService{
 		userRepo:         userRepo,
 		refreshTokenRepo: refreshRepo,
 		jwtService:       jwtService,
 		oauth2Service:    oauth2Service,
+		emailService:     emailService,
+		tokenService:     tokenService,
 	}
 }
 
@@ -52,8 +63,25 @@ func (s *authService) Register(ctx context.Context, user *models.User, password 
 	user.UpdatedAt = time.Now()
 	user.Provider = "password"
 	user.ProviderID = nil
+	user.IsActive = false
+	user.IsVerified = false
 
-	return s.userRepo.CreateUser(ctx, user)
+	err = s.userRepo.CreateUser(ctx, user)
+	if err != nil {
+		return err
+	}
+
+	token, err := s.tokenService.GenerateEmailVerificationToken(user.ID)
+	log.Printf("Verification token: %s", token)
+	if err != nil {
+		return err
+	}
+
+	err = s.emailService.SendVerificationEmail("joakimcarlsson1994@gmail.com", token)
+	if err != nil {
+		log.Printf("Error sending verification email: %v", err)
+	}
+	return nil
 }
 
 func (s *authService) Login(ctx context.Context, email, password string) (*models.User, string, string, error) {
@@ -65,6 +93,10 @@ func (s *authService) Login(ctx context.Context, email, password string) (*model
 	match, err := utils.ComparePasswordAndHash(password, *user.Password)
 	if err != nil || !match {
 		return nil, "", "", errors.New("invalid email or password")
+	}
+
+	if !user.IsVerified {
+		return nil, "", "", errors.New("email not verified")
 	}
 
 	accessToken, err := s.jwtService.GenerateAccessToken(user)
