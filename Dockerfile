@@ -24,8 +24,8 @@ COPY --from=builder /app/pkg/persistence/sql/migrations ./migrations
 COPY --from=builder /go/bin/migrate /usr/local/bin/migrate
 COPY --from=builder /app/script/run-migrations.sh .
 
-RUN chmod +x run-migrations.sh
+# RUN chmod +x run-migrations.sh
 
 EXPOSE 8080
 
-CMD ["./run-migrations.sh"]
+CMD ["./main"]
