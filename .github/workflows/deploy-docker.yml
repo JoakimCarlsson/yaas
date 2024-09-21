@@ -2,20 +2,25 @@ name: Trigger auto deployment for ca-yaas-prod
 
 on:
   push:
-    branches: 
-      [ dev ]
-    paths:
-    - '**'
+     branches: 
+       [ dev ]
+     paths: 
+     - '**'
 
   workflow_dispatch:      
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: "joakimcarlsson/yaas"
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
-    permissions: 
-      id-token: write
+
+    permissions:
       contents: read
+      packages: write
+      id-token: write
 
     steps:
       - name: Checkout to the branch
@@ -33,13 +38,11 @@ jobs:
         with:
           appSourcePath: ${{ github.workspace }}
           _dockerfilePathKey_: _dockerfilePath_
-          registryUrl: ghcr.io
-          registryUsername: ${{ secrets.CAYAASPROD_REGISTRY_USERNAME }}
+          registryUrl: ${{ env.REGISTRY }}
+          registryUsername: ${{ github.actor }}
           registryPassword: ${{ secrets.CAYAASPROD_REGISTRY_PASSWORD }}
           containerAppName: ca-yaas-prod
           resourceGroup: rg-yaas-prod
-          imageToBuild: ghcr.io/ca-yaas-prod:${{ github.sha }}
+          imageToBuild: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           _buildArgumentsKey_: |
             _buildArgumentsValues_
-
-
