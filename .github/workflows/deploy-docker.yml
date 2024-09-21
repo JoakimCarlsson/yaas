@@ -2,10 +2,10 @@ name: Trigger auto deployment for ca-yaas-prod
 
 on:
   push:
-    # branches: 
-    #   [ dev ]
-    # paths: 
-    # - '**'
+     branches: 
+       [ dev ]
+     paths: 
+     - '**'
 
   workflow_dispatch:      
 
@@ -46,5 +46,3 @@ jobs:
           imageToBuild: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           _buildArgumentsKey_: |
             _buildArgumentsValues_
-
-
