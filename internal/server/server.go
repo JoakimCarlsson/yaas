@@ -2,14 +2,14 @@ package server
 
 import (
 	"database/sql"
+	"github.com/joakimcarlsson/yaas/internal/handlers"
+	"github.com/joakimcarlsson/yaas/internal/middleware"
+	"github.com/joakimcarlsson/yaas/internal/services"
 	"net/http"
 
 	"github.com/joakimcarlsson/yaas/internal/config"
-	"github.com/joakimcarlsson/yaas/internal/handlers"
 	"github.com/joakimcarlsson/yaas/internal/logger"
-	"github.com/joakimcarlsson/yaas/internal/middleware"
 	"github.com/joakimcarlsson/yaas/internal/repository/postgres"
-	"github.com/joakimcarlsson/yaas/internal/services"
 )
 
 type Server struct {
@@ -33,9 +33,12 @@ func NewServer(cfg *config.Config, db *sql.DB) *Server {
 	jwtService := services.NewJWTService(cfg)
 	oauthService := services.NewOAuth2Service(cfg)
 	authService := services.NewAuthService(userRepo, refreshTokenRepo, jwtService, oauthService)
-	authHandler := handlers.NewAuthHandler(authService, oauthService)
 
-	s.router = NewRouter(authHandler)
+	authHandler := handlers.NewAuthHandler(authService, oauthService)
+	oauthHandler := handlers.NewOAuthHandler(oauthService, authService)
+	tokenHandler := handlers.NewTokenHandler(authService)
+
+	s.router = NewRouter(authHandler, oauthHandler, tokenHandler)
 
 	s.router = middleware.AuditLogMiddleware(s.router)
 	s.router = middleware.SecurityHeadersMiddleware(s.router)

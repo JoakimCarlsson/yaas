@@ -8,16 +8,22 @@ import (
 	"github.com/joakimcarlsson/yaas/internal/middleware"
 )
 
-func NewRouter(authHandler *handlers.AuthHandler) *http.ServeMux {
+func NewRouter(
+	authHandler *handlers.AuthHandler,
+	oauthHandler *handlers.OAuthHandler,
+	tokenHandler *handlers.TokenHandler,
+) *http.ServeMux {
 	mux := http.NewServeMux()
 	limiter := middleware.NewRateLimiter(5 * time.Minute)
 
 	mux.HandleFunc("/register", limiter.RateLimit(authHandler.Register))
 	mux.HandleFunc("/login", limiter.RateLimit(authHandler.Login))
-	mux.HandleFunc("/refresh_token", limiter.RateLimit(authHandler.RefreshToken))
-	mux.HandleFunc("/logout", limiter.RateLimit(authHandler.Logout))
-	mux.HandleFunc("/auth/google/login", limiter.RateLimit(authHandler.GoogleLogin))
-	mux.HandleFunc("/auth/google/callback", limiter.RateLimit(authHandler.GoogleCallback))
+
+	mux.HandleFunc("/logout", limiter.RateLimit(tokenHandler.Logout))
+	mux.HandleFunc("/refresh_token", limiter.RateLimit(tokenHandler.RefreshToken))
+
+	mux.HandleFunc("/auth/google/login", limiter.RateLimit(oauthHandler.GoogleLogin))
+	mux.HandleFunc("/auth/google/callback", limiter.RateLimit(oauthHandler.GoogleCallback))
 
 	return mux
 }
