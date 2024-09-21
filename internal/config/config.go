@@ -7,6 +7,11 @@ import (
 )
 
 type Config struct {
+	PostgresHost          string
+	PostgresUser          string
+	PostgresPort          string
+	PostgresPassword      string
+	PostgresDB            string
 	DatabaseURL           string
 	JWTAccessSecret       string
 	JWTRefreshSecret      string
@@ -43,8 +48,22 @@ func Load() *Config {
 		refreshTokenExpiry = 7 * 24 * time.Hour
 	}
 
+	postgresHost := os.Getenv("POSTGRES_HOST")
+	postgresUser := os.Getenv("POSTGRES_USER")
+	postgresPort := os.Getenv("POSTGRES_PORT")
+	postgresPassword := os.Getenv("POSTGRES_PASSWORD")
+	postgresDB := os.Getenv("POSTGRES_DB")
+
+	databaseURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		postgresUser, postgresPassword, postgresHost, postgresPort, postgresDB)
+
 	return &Config{
-		DatabaseURL:           os.Getenv("DATABASE_URL"),
+		PostgresHost:          postgresHost,
+		PostgresUser:          postgresUser,
+		PostgresPort:          postgresPort,
+		PostgresPassword:      postgresPassword,
+		PostgresDB:            postgresDB,
+		DatabaseURL:           databaseURL,
 		JWTAccessSecret:       os.Getenv("JWT_ACCESS_SECRET"),
 		JWTRefreshSecret:      os.Getenv("JWT_REFRESH_SECRET"),
 		JWTAccessTokenExpiry:  accessTokenExpiry,
