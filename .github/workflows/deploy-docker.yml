@@ -1,0 +1,50 @@
+name: Trigger auto deployment for ca-yaas-prod
+
+on:
+  push:
+    # branches: 
+    #   [ dev ]
+    # paths:
+    # - '**'
+
+  workflow_dispatch:      
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: "joakimcarlsson/netstream-api"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout to the branch
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.CAYAASPROD_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.CAYAASPROD_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.CAYAASPROD_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push container image to registry
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          appSourcePath: ${{ github.workspace }}
+          _dockerfilePathKey_: _dockerfilePath_
+          registryUrl: ${{ env.REGISTRY }}
+          registryUsername: ${{ github.actor }}
+          registryPassword: ${{ secrets.CAYAASPROD_REGISTRY_PASSWORD }}
+          containerAppName: ca-yaas-prod
+          resourceGroup: rg-yaas-prod
+          imageToBuild: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          _buildArgumentsKey_: |
+            _buildArgumentsValues_
+
+
