@@ -41,7 +41,7 @@ done
 
 >&2 echo "Postgres is up - executing migrations"
 
-DATABASE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@$POSTGRES_HOST:$POSTGRES_PORT/$POSTGRES_DB?sslmode=disable"
+DATABASE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@$POSTGRES_HOST:$POSTGRES_PORT/$POSTGRES_DB"
 
 if migrate -path ./migrations -database "$DATABASE_URL" up; then
   >&2 echo "Migrations applied successfully."
