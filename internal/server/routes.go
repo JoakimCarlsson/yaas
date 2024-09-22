@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/joakimcarlsson/yaas/internal/models"
 	"net/http"
 	"time"
 
@@ -12,22 +13,45 @@ func NewRouter(flowHandler *handlers.FlowHandler, tokenHandler *handlers.TokenHa
 	mux := http.NewServeMux()
 	limiter := middleware.NewRateLimiter(5 * time.Minute)
 
-	mux.HandleFunc("/refresh_token", limiter.RateLimit(tokenHandler.RefreshToken))
+	mux.HandleFunc("/self-service/token/refresh", limiter.RateLimit(tokenHandler.RefreshToken))
 
-	//oauth2 flows
-	mux.HandleFunc("/self-service/oauth/login/flows", limiter.RateLimit(flowHandler.InitiateOAuthLoginFlow))
-	mux.HandleFunc("/self-service/oauth/callback", limiter.RateLimit(flowHandler.ProceedOAuthLoginFlow))
+	mux.HandleFunc("/self-service/oauth/callback", limiter.RateLimit(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			flowHandler.ProceedOAuthLoginFlow(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
 
-	//registration flows
-	mux.HandleFunc("/self-service/registration/flows", limiter.RateLimit(flowHandler.InitiateRegistrationFlow))
-	mux.HandleFunc("/self-service/registration", limiter.RateLimit(flowHandler.ProceedRegistrationFlow))
+	mux.HandleFunc("/self-service/registration", limiter.RateLimit(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			flowHandler.InitiateFlow(w, r, models.FlowTypeRegistration)
+		} else if r.Method == http.MethodPost {
+			flowHandler.ProceedFlow(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
 
-	//login flows
-	mux.HandleFunc("/self-service/login/flows", limiter.RateLimit(flowHandler.InitiateLoginFlow))
-	mux.HandleFunc("/self-service/login", limiter.RateLimit(flowHandler.ProceedLoginFlow))
+	mux.HandleFunc("/self-service/login", limiter.RateLimit(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			flowHandler.InitiateFlow(w, r, models.FlowTypeLogin)
+		} else if r.Method == http.MethodPost {
+			flowHandler.ProceedFlow(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
 
-	//logout
-	mux.HandleFunc("/self-service/logout/flows", limiter.RateLimit(flowHandler.InitiateLogoutFlow))
-	mux.HandleFunc("/self-service/logout", limiter.RateLimit(flowHandler.ProceedLogoutFlow))
+	mux.HandleFunc("/self-service/logout", limiter.RateLimit(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			flowHandler.InitiateFlow(w, r, models.FlowTypeLogout)
+		} else if r.Method == http.MethodPost {
+			flowHandler.ProceedFlow(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
+
 	return mux
 }
