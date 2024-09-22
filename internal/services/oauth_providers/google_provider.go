@@ -2,13 +2,15 @@ package oauth_providers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 )
 
 type GoogleProvider struct{}
 
 func (g *GoogleProvider) GetProviderID(userInfo map[string]interface{}) (string, error) {
-	if id, ok := userInfo["sub"].(string); ok {
+	fmt.Println(userInfo)
+	if id, ok := userInfo["id"].(string); ok {
 		return id, nil
 	}
 	return "", errors.New("failed to get provider ID from user info (Google)")
