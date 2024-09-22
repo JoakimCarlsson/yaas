@@ -97,9 +97,9 @@ func (h *FlowHandler) ProceedFlow(w http.ResponseWriter, r *http.Request) {
 			utils.JSONError(w, http.StatusBadRequest, "Invalid authentication method")
 		}
 	case models.FlowTypeRegistration:
-		h.ProceedRegistrationFlow(w, r, flow)
+		h.ProceedRegistrationFlow(w, r, flow, req.Email, req.Password)
 	case models.FlowTypeLogout:
-		h.ProceedLogoutFlow(w, r, flow)
+		h.ProceedLogoutFlow(w, r, flow) // Assuming password is used as refresh token
 	default:
 		utils.JSONError(w, http.StatusBadRequest, "Invalid flow type")
 	}
@@ -170,22 +170,13 @@ func (h *FlowHandler) handleOAuthLogin(w http.ResponseWriter, r *http.Request, f
 	//http.Redirect(w, r, loginURL, http.StatusTemporaryRedirect)
 }
 
-func (h *FlowHandler) ProceedRegistrationFlow(w http.ResponseWriter, r *http.Request, flow *models.Flow) {
-	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, "Invalid request payload")
-		return
-	}
-
+func (h *FlowHandler) ProceedRegistrationFlow(w http.ResponseWriter, r *http.Request, flow *models.Flow, email, password string) {
 	user := &models.User{
-		Email:    req.Email,
-		Password: &req.Password,
+		Email:    email,
+		Password: &password,
 	}
 
-	err := h.AuthService.Register(r.Context(), user, req.Password)
+	err := h.AuthService.Register(r.Context(), user, password)
 	if err != nil {
 		flow.Errors = append(flow.Errors, models.FlowError{
 			Field:   "email",

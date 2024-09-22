@@ -9,9 +9,11 @@ import (
 	"github.com/joakimcarlsson/yaas/internal/middleware"
 )
 
-func NewRouter(flowHandler *handlers.FlowHandler, tokenHandler *handlers.TokenHandler) *http.ServeMux {
+func NewRouter(flowHandler *handlers.FlowHandler, tokenHandler *handlers.TokenHandler) http.Handler {
 	mux := http.NewServeMux()
 	limiter := middleware.NewRateLimiter(5 * time.Minute)
+
+	corsHandler := middleware.CORSMiddleware(mux)
 
 	mux.HandleFunc("/self-service/token/refresh", limiter.RateLimit(tokenHandler.RefreshToken))
 
@@ -53,5 +55,5 @@ func NewRouter(flowHandler *handlers.FlowHandler, tokenHandler *handlers.TokenHa
 		}
 	}))
 
-	return mux
+	return corsHandler
 }
