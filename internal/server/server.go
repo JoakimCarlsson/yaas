@@ -36,8 +36,6 @@ func NewServer(cfg *config.Config, db *sql.DB) *Server {
 	oauthService := services.NewOAuth2Service(cfg)
 	authService := services.NewAuthService(userRepo, refreshTokenRepo, jwtService, oauthService)
 
-	//authHandler := handlers.NewAuthHandler(authService, oauthService)
-	//oauthHandler := handlers.NewOAuthHandler(oauthService, authService)
 	tokenHandler := handlers.NewTokenHandler(authService)
 	flowHandler := handlers.NewFlowHandler(flowService, authService, oauthService)
 
