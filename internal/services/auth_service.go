@@ -3,7 +3,8 @@ package services
 import (
 	"context"
 	"errors"
-	"fmt"
+	"github.com/joakimcarlsson/yaas/internal/services/oauth_providers"
+	"golang.org/x/oauth2"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -26,7 +27,7 @@ type AuthService interface {
 	Logout(ctx context.Context, refreshToken string) error
 	GenerateStateToken(callbackURL string) (string, error)
 	ValidateStateToken(token string) (string, error)
-	ProcessOAuthLogin(ctx context.Context, provider string, userInfo map[string]interface{}) (*models.User, string, string, error)
+	ProcessOAuthLogin(ctx context.Context, provider string, userInfo map[string]interface{}, token *oauth2.Token) (*models.User, string, string, error)
 }
 
 type authService struct {
@@ -192,24 +193,24 @@ func (s *authService) ValidateStateToken(tokenStr string) (string, error) {
 	return claims.CallbackURL, nil
 }
 
-func (s *authService) ProcessOAuthLogin(ctx context.Context, provider string, userInfo map[string]interface{}) (*models.User, string, string, error) {
-	email, ok := userInfo["email"].(string)
-	if !ok {
-		return nil, "", "", errors.New("failed to get email from user info")
+func (s *authService) ProcessOAuthLogin(ctx context.Context, provider string, userInfo map[string]interface{}, token *oauth2.Token) (*models.User, string, string, error) {
+	providerFactory := oauth_providers.OAuthProviderFactory{}
+	providerStrategy, err := providerFactory.GetProvider(provider)
+	if err != nil {
+		return nil, "", "", err
 	}
 
-	var providerID string
-	if provider == "github" {
-		if id, ok := userInfo["id"].(float64); ok {
-			providerID = fmt.Sprintf("%.0f", id)
-		} else {
-			return nil, "", "", errors.New("failed to get provider ID from user info (GitHub)")
-		}
-	} else {
-		providerID, ok = userInfo["id"].(string)
-		if !ok {
-			return nil, "", "", errors.New("failed to get provider ID from user info")
-		}
+	providerID, err := providerStrategy.GetProviderID(userInfo)
+	if err != nil {
+		return nil, "", "", err
+	}
+
+	client := oauth2.NewClient(ctx, oauth2.StaticTokenSource(token))
+
+	// Extract the email
+	email, err := providerStrategy.GetEmail(userInfo, client)
+	if err != nil {
+		return nil, "", "", err
 	}
 
 	user, err := s.userRepo.GetUserByEmail(ctx, email)
@@ -239,7 +240,7 @@ func (s *authService) ProcessOAuthLogin(ctx context.Context, provider string, us
 		}
 	}
 
-	// Generate tokens
+	// Generate access and refresh tokens
 	accessToken, err := s.jwtService.GenerateAccessToken(user)
 	if err != nil {
 		return nil, "", "", err
