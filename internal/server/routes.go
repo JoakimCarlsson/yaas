@@ -22,8 +22,8 @@ func NewRouter(
 	mux.HandleFunc("/logout", limiter.RateLimit(tokenHandler.Logout))
 	mux.HandleFunc("/refresh_token", limiter.RateLimit(tokenHandler.RefreshToken))
 
-	mux.HandleFunc("/auth/google/login", limiter.RateLimit(oauthHandler.GoogleLogin))
-	mux.HandleFunc("/auth/google/callback", limiter.RateLimit(oauthHandler.GoogleCallback))
+	mux.HandleFunc("/auth/login", limiter.RateLimit(oauthHandler.OAuthLogin))
+	mux.HandleFunc("/auth/callback", limiter.RateLimit(oauthHandler.OAuthCallback))
 
 	return mux
 }

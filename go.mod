@@ -12,7 +12,4 @@ require (
 	golang.org/x/time v0.6.0
 )
 
-require (
-	cloud.google.com/go/compute/metadata v0.3.0 // indirect
-	golang.org/x/sys v0.25.0 // indirect
-)
+require golang.org/x/sys v0.25.0 // indirect

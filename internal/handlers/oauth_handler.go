@@ -2,8 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"net/url"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joakimcarlsson/yaas/internal/services"
@@ -21,86 +19,66 @@ func NewOAuthHandler(oauth2Service services.OAuth2Service, authService services.
 	}
 }
 
-var stateSecret = []byte("your-secret-key")
-
 type StateClaims struct {
 	CallbackURL string `json:"callback_url"`
 	jwt.RegisteredClaims
 }
 
-func (h *OAuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
+func (h *OAuthHandler) OAuthLogin(w http.ResponseWriter, r *http.Request) {
+	provider := r.URL.Query().Get("provider")
 	callbackURL := r.URL.Query().Get("callback_url")
-	if callbackURL == "" {
-		http.Error(w, "Callback URL is required", http.StatusBadRequest)
+	if provider == "" || callbackURL == "" {
+		http.Error(w, "Provider and callback URL are required", http.StatusBadRequest)
 		return
 	}
 
-	expirationTime := time.Now().Add(15 * time.Minute)
-	claims := &StateClaims{
-		CallbackURL: callbackURL,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expirationTime),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	state, err := token.SignedString(stateSecret)
+	stateToken, err := h.AuthService.GenerateStateToken(callbackURL)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, "Failed to generate state token", http.StatusInternalServerError)
 		return
 	}
 
-	googleURL := h.OAuth2Service.GetGoogleLoginURL(state)
-	http.Redirect(w, r, googleURL, http.StatusTemporaryRedirect)
-}
-
-func (h *OAuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
-	state := r.URL.Query().Get("state")
-	if state == "" {
-		http.Error(w, "Missing state parameter", http.StatusBadRequest)
-		return
-	}
-
-	claims := &StateClaims{}
-	token, err := jwt.ParseWithClaims(state, claims, func(token *jwt.Token) (interface{}, error) {
-		return stateSecret, nil
-	})
-
-	if err != nil || !token.Valid {
-		http.Error(w, "Invalid or expired state token", http.StatusBadRequest)
-		return
-	}
-
-	callbackURL := claims.CallbackURL
-
-	code := r.URL.Query().Get("code")
-	if code == "" {
-		http.Error(w, "Code not provided", http.StatusBadRequest)
-		return
-	}
-
-	tokenData, err := h.OAuth2Service.ExchangeCodeForToken(code)
-	if err != nil {
-		http.Error(w, "Failed to exchange code for token", http.StatusInternalServerError)
-		return
-	}
-
-	_, accessToken, refreshToken, err := h.AuthService.GoogleSignIn(r.Context(), tokenData)
+	loginURL, err := h.OAuth2Service.GetLoginURL(provider, stateToken)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	redirectURL, err := url.Parse(callbackURL)
-	if err != nil {
-		http.Error(w, "Invalid callback URL", http.StatusInternalServerError)
+	http.Redirect(w, r, loginURL, http.StatusTemporaryRedirect)
+}
+
+func (h *OAuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
+	provider := r.URL.Query().Get("provider")
+	state := r.URL.Query().Get("state")
+	code := r.URL.Query().Get("code")
+	if provider == "" || state == "" || code == "" {
+		http.Error(w, "Missing parameters", http.StatusBadRequest)
 		return
 	}
 
-	query := redirectURL.Query()
-	query.Set("accessToken", accessToken)
-	query.Set("refreshToken", refreshToken)
-	redirectURL.RawQuery = query.Encode()
+	callbackURL, err := h.AuthService.ValidateStateToken(state)
+	if err != nil {
+		http.Error(w, "Invalid state token", http.StatusBadRequest)
+		return
+	}
 
-	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
+	token, err := h.OAuth2Service.ExchangeCodeForToken(provider, code)
+	if err != nil {
+		http.Error(w, "Failed to exchange code for token", http.StatusInternalServerError)
+		return
+	}
+
+	userInfo, err := h.OAuth2Service.GetUserInfo(provider, token)
+	if err != nil {
+		http.Error(w, "Failed to get user info", http.StatusInternalServerError)
+		return
+	}
+
+	_, accessToken, refreshToken, err := h.AuthService.ProcessOAuthLogin(r.Context(), provider, userInfo)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, callbackURL+"?accessToken="+accessToken+"&refreshToken="+refreshToken, http.StatusFound)
 }

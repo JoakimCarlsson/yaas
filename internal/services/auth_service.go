@@ -3,22 +3,30 @@ package services
 import (
 	"context"
 	"errors"
-	"log"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joakimcarlsson/yaas/internal/models"
 	"github.com/joakimcarlsson/yaas/internal/repository"
 	"github.com/joakimcarlsson/yaas/internal/utils"
-	"golang.org/x/oauth2"
 )
+
+var stateSecret = []byte("your-secure-state-secret") //todo read from config, or use a secure random generator
+
+type StateClaims struct {
+	CallbackURL string `json:"callback_url"`
+	jwt.RegisteredClaims
+}
 
 type AuthService interface {
 	Register(ctx context.Context, user *models.User, password string) error
 	Login(ctx context.Context, email, password string) (*models.User, string, string, error)
 	RefreshToken(ctx context.Context, refreshToken string) (string, string, error)
 	Logout(ctx context.Context, refreshToken string) error
-	GoogleSignIn(ctx context.Context, token *oauth2.Token) (*models.User, string, string, error)
+	GenerateStateToken(callbackURL string) (string, error)
+	ValidateStateToken(token string) (string, error)
+	ProcessOAuthLogin(ctx context.Context, provider string, userInfo map[string]interface{}) (*models.User, string, string, error)
 }
 
 type authService struct {
@@ -143,53 +151,95 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken string) (st
 	return newAccessToken, newRefreshToken, nil
 }
 
-func (s *authService) GoogleSignIn(ctx context.Context, token *oauth2.Token) (*models.User, string, string, error) {
-	userInfo, err := s.oauth2Service.GetGoogleUserInfo(token)
+func (s *authService) Logout(ctx context.Context, refreshToken string) error {
+	token, err := s.jwtService.ValidateRefreshToken(refreshToken)
 	if err != nil {
-		return nil, "", "", err
+		return errors.New("invalid refresh token")
 	}
 
+	jti, err := s.jwtService.GetJTIFromToken(token)
+	if err != nil {
+		return errors.New("invalid jti in token")
+	}
+
+	return s.refreshTokenRepo.Delete(ctx, jti)
+}
+
+func (s *authService) GenerateStateToken(callbackURL string) (string, error) {
+	expirationTime := time.Now().Add(15 * time.Minute)
+
+	claims := &StateClaims{
+		CallbackURL: callbackURL,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(stateSecret)
+}
+
+func (s *authService) ValidateStateToken(tokenStr string) (string, error) {
+	claims := &StateClaims{}
+	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+		return stateSecret, nil
+	})
+
+	if err != nil || !token.Valid {
+		return "", errors.New("invalid or expired state token")
+	}
+
+	return claims.CallbackURL, nil
+}
+
+func (s *authService) ProcessOAuthLogin(ctx context.Context, provider string, userInfo map[string]interface{}) (*models.User, string, string, error) {
 	email, ok := userInfo["email"].(string)
 	if !ok {
-		return nil, "", "", errors.New("failed to get email from Google user info")
+		return nil, "", "", errors.New("failed to get email from user info")
 	}
 
-	googleID, ok := userInfo["id"].(string)
-	if !ok {
-		return nil, "", "", errors.New("failed to get Google ID from user info")
+	var providerID string
+	if provider == "github" {
+		if id, ok := userInfo["id"].(float64); ok {
+			providerID = fmt.Sprintf("%.0f", id)
+		} else {
+			return nil, "", "", errors.New("failed to get provider ID from user info (GitHub)")
+		}
+	} else {
+		providerID, ok = userInfo["id"].(string)
+		if !ok {
+			return nil, "", "", errors.New("failed to get provider ID from user info")
+		}
 	}
 
 	user, err := s.userRepo.GetUserByEmail(ctx, email)
-	if err != nil {
-		log.Printf("Creating new user with email: %s and googleID: %s", email, googleID)
+	if err != nil || user == nil {
 		user = &models.User{
 			Email:      email,
-			Password:   nil,
 			IsActive:   true,
 			IsVerified: true,
-			Provider:   "google",
-			ProviderID: &googleID,
+			Provider:   provider,
+			ProviderID: &providerID,
 			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),
 		}
 		if err := s.userRepo.CreateUser(ctx, user); err != nil {
-			log.Printf("Error creating user: %v", err)
 			return nil, "", "", err
 		}
 	} else {
-		log.Printf("Existing user found: %+v", user)
-		if user.Provider != "google" {
-			return nil, "", "", errors.New("email already in use with different provider")
-		} else if user.ProviderID != &googleID {
-			user.ProviderID = &googleID
-			user.Password = nil
-			if err := s.userRepo.UpdateUser(ctx, user); err != nil {
-				log.Printf("Error updating user: %v", err)
-				return nil, "", "", err
-			}
+		if user.Provider != provider || user.ProviderID == nil || *user.ProviderID != providerID {
+			return nil, "", "", errors.New("email already in use with a different provider")
+		}
+
+		now := time.Now()
+		user.LastLogin = &now
+		user.UpdatedAt = now
+		if err := s.userRepo.UpdateUser(ctx, user); err != nil {
+			return nil, "", "", err
 		}
 	}
 
+	// Generate tokens
 	accessToken, err := s.jwtService.GenerateAccessToken(user)
 	if err != nil {
 		return nil, "", "", err
@@ -204,26 +254,5 @@ func (s *authService) GoogleSignIn(ctx context.Context, token *oauth2.Token) (*m
 		return nil, "", "", err
 	}
 
-	now := time.Now()
-	user.LastLogin = &now
-	user.UpdatedAt = now
-	if err := s.userRepo.UpdateUser(ctx, user); err != nil {
-		return nil, "", "", err
-	}
-
 	return user, accessToken, refreshToken, nil
-}
-
-func (s *authService) Logout(ctx context.Context, refreshToken string) error {
-	token, err := s.jwtService.ValidateRefreshToken(refreshToken)
-	if err != nil {
-		return errors.New("invalid refresh token")
-	}
-
-	jti, err := s.jwtService.GetJTIFromToken(token)
-	if err != nil {
-		return errors.New("invalid jti in token")
-	}
-
-	return s.refreshTokenRepo.Delete(ctx, jti)
 }
