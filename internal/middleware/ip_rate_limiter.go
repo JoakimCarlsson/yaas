@@ -43,12 +43,6 @@ func NewRateLimiter(cleanup time.Duration) *RateLimiter {
 	return rl
 }
 
-func (rl *RateLimiter) AddConfig(endpoint string, limit rate.Limit, burst int) {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	rl.configs[endpoint] = RateLimiterConfig{Limit: limit, Burst: burst}
-}
-
 func (rl *RateLimiter) getVisitor(ip, endpoint string) *rate.Limiter {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()

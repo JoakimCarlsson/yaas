@@ -129,7 +129,6 @@ func (h *FlowHandler) InitiateOAuthLoginFlow(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Update flow state to 'redirect_to_provider'
 	flow.State = models.FlowStateRedirectToProvider
 	err = h.FlowService.UpdateFlow(r.Context(), flow)
 	if err != nil {
@@ -137,7 +136,6 @@ func (h *FlowHandler) InitiateOAuthLoginFlow(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Redirect the client to the provider's login URL
 	http.Redirect(w, r, loginURL, http.StatusFound)
 }
 
@@ -182,7 +180,6 @@ func (h *FlowHandler) ProceedLogoutFlow(w http.ResponseWriter, r *http.Request) 
 
 	switch flow.State {
 	case models.FlowStateInitiated:
-		// Optional: Ask for confirmation before logging out
 		flow.State = models.FlowStateConfirmLogout
 		err = h.FlowService.UpdateFlow(r.Context(), flow)
 		if err != nil {
@@ -192,7 +189,6 @@ func (h *FlowHandler) ProceedLogoutFlow(w http.ResponseWriter, r *http.Request) 
 		utils.JSONResponse(w, http.StatusOK, flow)
 
 	case models.FlowStateConfirmLogout:
-		// Proceed with logout
 		var req struct {
 			RefreshToken string `json:"refreshToken"`
 		}
