@@ -12,6 +12,7 @@ func NewRouter(
 	authHandler *handlers.AuthHandler,
 	oauthHandler *handlers.OAuthHandler,
 	tokenHandler *handlers.TokenHandler,
+	flowHandler *handlers.FlowHandler,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
 	limiter := middleware.NewRateLimiter(5 * time.Minute)
@@ -24,6 +25,12 @@ func NewRouter(
 
 	mux.HandleFunc("/auth/login", limiter.RateLimit(oauthHandler.OAuthLogin))
 	mux.HandleFunc("/auth/callback", limiter.RateLimit(oauthHandler.OAuthCallback))
+
+	mux.HandleFunc("/self-service/registration/flows", limiter.RateLimit(flowHandler.InitiateRegistrationFlow))
+	mux.HandleFunc("/self-service/registration", limiter.RateLimit(flowHandler.ProceedRegistrationFlow))
+
+	mux.HandleFunc("/self-service/login/flows", limiter.RateLimit(flowHandler.InitiateLoginFlow))
+	mux.HandleFunc("/self-service/login", limiter.RateLimit(flowHandler.ProceedLoginFlow))
 
 	return mux
 }

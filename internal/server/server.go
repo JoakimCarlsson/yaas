@@ -29,7 +29,9 @@ func NewServer(cfg *config.Config, db *sql.DB) *Server {
 
 	userRepo := postgres.NewUserRepository(db)
 	refreshTokenRepo := postgres.NewRefreshTokenRepository(db)
+	flowRepo := postgres.NewFlowRepository(db)
 
+	flowService := services.NewFlowService(flowRepo)
 	jwtService := services.NewJWTService(cfg)
 	oauthService := services.NewOAuth2Service(cfg)
 	authService := services.NewAuthService(userRepo, refreshTokenRepo, jwtService, oauthService)
@@ -37,8 +39,9 @@ func NewServer(cfg *config.Config, db *sql.DB) *Server {
 	authHandler := handlers.NewAuthHandler(authService, oauthService)
 	oauthHandler := handlers.NewOAuthHandler(oauthService, authService)
 	tokenHandler := handlers.NewTokenHandler(authService)
+	flowHandler := handlers.NewFlowHandler(flowService, authService)
 
-	routerWithMiddlewares := middleware.AuditLogMiddleware(NewRouter(authHandler, oauthHandler, tokenHandler))
+	routerWithMiddlewares := middleware.AuditLogMiddleware(NewRouter(authHandler, oauthHandler, tokenHandler, flowHandler))
 	routerWithMiddlewares = middleware.SecurityHeadersMiddleware(routerWithMiddlewares)
 
 	s.router = routerWithMiddlewares
