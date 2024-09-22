@@ -7,6 +7,7 @@ type FlowState string
 
 const (
 	FlowTypeLogin               FlowType  = "login"
+	FlowTypeLogout              FlowType  = "logout"
 	FlowTypeRegistration        FlowType  = "registration"
 	FlowStateEnterDetails       FlowState = "enter_details"
 	FlowStateVerifyEmail        FlowState = "verify_email"
@@ -18,6 +19,9 @@ const (
 	FlowStateEnterCredentials   FlowState = "enter_credentials"
 	FlowStateSuccess            FlowState = "success"
 	FlowStateFailed             FlowState = "failed"
+	FlowStateInitiated          FlowState = "initiated"
+	FlowStateConfirmLogout      FlowState = "confirm_logout"
+	FlowStateLogoutComplete     FlowState = "logout_complete"
 )
 
 type FlowError struct {

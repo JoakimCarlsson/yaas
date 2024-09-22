@@ -152,6 +152,78 @@ func (h *FlowHandler) InitiateLoginFlow(w http.ResponseWriter, r *http.Request) 
 	utils.JSONResponse(w, http.StatusOK, flow)
 }
 
+func (h *FlowHandler) InitiateLogoutFlow(w http.ResponseWriter, r *http.Request) {
+	requestURL := r.URL.String()
+	flow, err := h.FlowService.InitiateFlow(r.Context(), models.FlowTypeLogout, requestURL)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, "Failed to initiate logout flow")
+		return
+	}
+	utils.JSONResponse(w, http.StatusOK, flow)
+}
+
+func (h *FlowHandler) ProceedLogoutFlow(w http.ResponseWriter, r *http.Request) {
+	flowID := r.URL.Query().Get("flow")
+	if flowID == "" {
+		utils.JSONError(w, http.StatusBadRequest, "Flow ID is required")
+		return
+	}
+
+	flow, err := h.FlowService.GetFlowByID(r.Context(), flowID)
+	if err != nil || flow == nil {
+		utils.JSONError(w, http.StatusNotFound, "Flow not found")
+		return
+	}
+
+	if time.Now().After(flow.ExpiresAt) {
+		utils.JSONError(w, http.StatusGone, "Flow has expired")
+		return
+	}
+
+	switch flow.State {
+	case models.FlowStateInitiated:
+		// Optional: Ask for confirmation before logging out
+		flow.State = models.FlowStateConfirmLogout
+		err = h.FlowService.UpdateFlow(r.Context(), flow)
+		if err != nil {
+			utils.JSONError(w, http.StatusInternalServerError, "Failed to update flow")
+			return
+		}
+		utils.JSONResponse(w, http.StatusOK, flow)
+
+	case models.FlowStateConfirmLogout:
+		// Proceed with logout
+		var req struct {
+			RefreshToken string `json:"refreshToken"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			utils.JSONError(w, http.StatusBadRequest, "Invalid request payload")
+			return
+		}
+
+		if err := h.AuthService.Logout(r.Context(), req.RefreshToken); err != nil {
+			flow.Errors = append(flow.Errors, models.FlowError{
+				Field:   "refreshToken",
+				Message: "Failed to logout",
+			})
+			h.FlowService.UpdateFlow(r.Context(), flow)
+			utils.JSONResponse(w, http.StatusOK, flow)
+			return
+		}
+
+		flow.State = models.FlowStateLogoutComplete
+		h.FlowService.UpdateFlow(r.Context(), flow)
+
+		utils.JSONResponse(w, http.StatusOK, map[string]interface{}{
+			"flow":    flow,
+			"message": "Successfully logged out",
+		})
+
+	default:
+		utils.JSONError(w, http.StatusBadRequest, "Invalid flow state")
+	}
+}
+
 func (h *FlowHandler) InitiateRegistrationFlow(w http.ResponseWriter, r *http.Request) {
 	requestURL := r.URL.String()
 	flow, err := h.FlowService.InitiateFlow(r.Context(), models.FlowTypeRegistration, requestURL)
