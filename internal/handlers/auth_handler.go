@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/joakimcarlsson/yaas/internal/models"
 	"github.com/joakimcarlsson/yaas/internal/services"
@@ -13,11 +12,6 @@ import (
 type AuthHandler struct {
 	AuthService   services.AuthService
 	OAuth2Service services.OAuth2Service
-}
-
-type stateData struct {
-	CallbackURL string
-	Expiry      time.Time
 }
 
 func NewAuthHandler(authService services.AuthService, oauth2Service services.OAuth2Service) *AuthHandler {

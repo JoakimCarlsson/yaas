@@ -1,57 +1,56 @@
 package handlers
 
 import (
-	"crypto/rand"
-	"encoding/base64"
-	"github.com/joakimcarlsson/yaas/internal/services"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/joakimcarlsson/yaas/internal/services"
 )
 
 type OAuthHandler struct {
 	OAuth2Service services.OAuth2Service
 	AuthService   services.AuthService
-	stateStore    map[string]stateData
-	stateMutex    sync.Mutex
 }
 
 func NewOAuthHandler(oauth2Service services.OAuth2Service, authService services.AuthService) *OAuthHandler {
 	return &OAuthHandler{
 		OAuth2Service: oauth2Service,
 		AuthService:   authService,
-		stateStore:    make(map[string]stateData),
 	}
 }
 
-func (h *OAuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
+var stateSecret = []byte("your-secret-key")
 
+type StateClaims struct {
+	CallbackURL string `json:"callback_url"`
+	jwt.RegisteredClaims
+}
+
+func (h *OAuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 	callbackURL := r.URL.Query().Get("callback_url")
 	if callbackURL == "" {
 		http.Error(w, "Callback URL is required", http.StatusBadRequest)
 		return
 	}
 
-	//validate callback url, and check that the domain is allowed
+	expirationTime := time.Now().Add(15 * time.Minute)
+	claims := &StateClaims{
+		CallbackURL: callbackURL,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+		},
+	}
 
-	b := make([]byte, 16)
-	_, err := rand.Read(b)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	state, err := token.SignedString(stateSecret)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	state := base64.URLEncoding.EncodeToString(b)
-
-	h.stateMutex.Lock()
-	h.stateStore[state] = stateData{
-		CallbackURL: callbackURL,
-		Expiry:      time.Now().Add(15 * time.Minute),
-	}
-	h.stateMutex.Unlock()
 
 	googleURL := h.OAuth2Service.GetGoogleLoginURL(state)
-
 	http.Redirect(w, r, googleURL, http.StatusTemporaryRedirect)
 }
 
@@ -62,15 +61,17 @@ func (h *OAuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.stateMutex.Lock()
-	data, exists := h.stateStore[state]
-	delete(h.stateStore, state)
-	h.stateMutex.Unlock()
+	claims := &StateClaims{}
+	token, err := jwt.ParseWithClaims(state, claims, func(token *jwt.Token) (interface{}, error) {
+		return stateSecret, nil
+	})
 
-	if !exists || time.Now().After(data.Expiry) {
-		http.Error(w, "Invalid or expired state", http.StatusBadRequest)
+	if err != nil || !token.Valid {
+		http.Error(w, "Invalid or expired state token", http.StatusBadRequest)
 		return
 	}
+
+	callbackURL := claims.CallbackURL
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
@@ -78,19 +79,19 @@ func (h *OAuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.OAuth2Service.ExchangeCodeForToken(code)
+	tokenData, err := h.OAuth2Service.ExchangeCodeForToken(code)
 	if err != nil {
 		http.Error(w, "Failed to exchange code for token", http.StatusInternalServerError)
 		return
 	}
 
-	_, accessToken, refreshToken, err := h.AuthService.GoogleSignIn(r.Context(), token)
+	_, accessToken, refreshToken, err := h.AuthService.GoogleSignIn(r.Context(), tokenData)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	redirectURL, err := url.Parse(data.CallbackURL)
+	redirectURL, err := url.Parse(callbackURL)
 	if err != nil {
 		http.Error(w, "Invalid callback URL", http.StatusInternalServerError)
 		return

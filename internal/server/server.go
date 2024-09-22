@@ -38,10 +38,10 @@ func NewServer(cfg *config.Config, db *sql.DB) *Server {
 	oauthHandler := handlers.NewOAuthHandler(oauthService, authService)
 	tokenHandler := handlers.NewTokenHandler(authService)
 
-	s.router = NewRouter(authHandler, oauthHandler, tokenHandler)
+	routerWithMiddlewares := middleware.AuditLogMiddleware(NewRouter(authHandler, oauthHandler, tokenHandler))
+	routerWithMiddlewares = middleware.SecurityHeadersMiddleware(routerWithMiddlewares)
 
-	s.router = middleware.AuditLogMiddleware(s.router)
-	s.router = middleware.SecurityHeadersMiddleware(s.router)
+	s.router = routerWithMiddlewares
 
 	return s
 }
