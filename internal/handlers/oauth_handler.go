@@ -48,37 +48,37 @@ func (h *OAuthHandler) OAuthLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *OAuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
-	provider := r.URL.Query().Get("provider")
-	state := r.URL.Query().Get("state")
-	code := r.URL.Query().Get("code")
-	if provider == "" || state == "" || code == "" {
-		http.Error(w, "Missing parameters", http.StatusBadRequest)
-		return
-	}
-
-	callbackURL, err := h.AuthService.ValidateStateToken(state)
-	if err != nil {
-		http.Error(w, "Invalid state token", http.StatusBadRequest)
-		return
-	}
-
-	token, err := h.OAuth2Service.ExchangeCodeForToken(provider, code)
-	if err != nil {
-		http.Error(w, "Failed to exchange code for token", http.StatusInternalServerError)
-		return
-	}
-
-	userInfo, err := h.OAuth2Service.GetUserInfo(provider, token)
-	if err != nil {
-		http.Error(w, "Failed to get user info", http.StatusInternalServerError)
-		return
-	}
-
-	_, accessToken, refreshToken, err := h.AuthService.ProcessOAuthLogin(r.Context(), provider, userInfo, token)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	http.Redirect(w, r, callbackURL+"?accessToken="+accessToken+"&refreshToken="+refreshToken, http.StatusFound)
+	//provider := r.URL.Query().Get("provider")
+	//state := r.URL.Query().Get("state")
+	//code := r.URL.Query().Get("code")
+	//if provider == "" || state == "" || code == "" {
+	//	http.Error(w, "Missing parameters", http.StatusBadRequest)
+	//	return
+	//}
+	//
+	//callbackURL, err := h.AuthService.ValidateStateToken(state)
+	//if err != nil {
+	//	http.Error(w, "Invalid state token", http.StatusBadRequest)
+	//	return
+	//}
+	//
+	//token, err := h.OAuth2Service.ExchangeCodeForToken(provider, code)
+	//if err != nil {
+	//	http.Error(w, "Failed to exchange code for token", http.StatusInternalServerError)
+	//	return
+	//}
+	//
+	//userInfo, err := h.OAuth2Service.GetUserInfo(provider, token)
+	//if err != nil {
+	//	http.Error(w, "Failed to get user info", http.StatusInternalServerError)
+	//	return
+	//}
+	//
+	//_, accessToken, refreshToken, err := h.AuthService.ProcessOAuthLogin(r.Context(), provider, userInfo, token)
+	//if err != nil {
+	//	http.Error(w, err.Error(), http.StatusInternalServerError)
+	//	return
+	//}
+	//
+	//http.Redirect(w, r, callbackURL+"?accessToken="+accessToken+"&refreshToken="+refreshToken, http.StatusFound)
 }

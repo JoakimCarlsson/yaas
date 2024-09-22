@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/joakimcarlsson/yaas/internal/models"
 	"github.com/joakimcarlsson/yaas/internal/services"
 	"github.com/joakimcarlsson/yaas/internal/utils"
@@ -10,15 +11,134 @@ import (
 )
 
 type FlowHandler struct {
-	FlowService services.FlowService
-	AuthService services.AuthService
+	FlowService   services.FlowService
+	AuthService   services.AuthService
+	OAuth2Service services.OAuth2Service
 }
 
-func NewFlowHandler(flowService services.FlowService, authService services.AuthService) *FlowHandler {
+func NewFlowHandler(flowService services.FlowService, authService services.AuthService, oauth2Service services.OAuth2Service) *FlowHandler {
 	return &FlowHandler{
-		FlowService: flowService,
-		AuthService: authService,
+		FlowService:   flowService,
+		AuthService:   authService,
+		OAuth2Service: oauth2Service,
 	}
+}
+
+func (h *FlowHandler) ProceedOAuthLoginFlow(w http.ResponseWriter, r *http.Request) {
+	provider := r.URL.Query().Get("provider")
+	state := r.URL.Query().Get("state")
+	code := r.URL.Query().Get("code")
+	if provider == "" || state == "" || code == "" {
+		utils.JSONError(w, http.StatusBadRequest, "Missing parameters")
+		return
+	}
+
+	// Validate state token and extract flow ID and callback URL
+	flowID, callbackURL, err := h.AuthService.ValidateStateToken(state)
+	if err != nil {
+		utils.JSONError(w, http.StatusBadRequest, "Invalid state token")
+		return
+	}
+
+	// Retrieve the flow
+	flow, err := h.FlowService.GetFlowByID(r.Context(), flowID)
+	if err != nil || flow == nil {
+		utils.JSONError(w, http.StatusNotFound, "Flow not found")
+		return
+	}
+
+	if flow.State != models.FlowStateRedirectToProvider && flow.State != models.FlowStateAwaitingCallback {
+		utils.JSONError(w, http.StatusBadRequest, "Invalid flow state")
+		return
+	}
+
+	// Update flow state to 'processing_callback'
+	flow.State = models.FlowStateProcessingCallback
+	h.FlowService.UpdateFlow(r.Context(), flow)
+
+	// Exchange code for token
+	token, err := h.OAuth2Service.ExchangeCodeForToken(provider, code)
+	if err != nil {
+		flow.Errors = append(flow.Errors, models.FlowError{
+			Field:   "code",
+			Message: "Failed to exchange code for token",
+		})
+		h.FlowService.UpdateFlow(r.Context(), flow)
+		utils.JSONResponse(w, http.StatusOK, flow)
+		return
+	}
+
+	// Get user info
+	userInfo, err := h.OAuth2Service.GetUserInfo(provider, token)
+	if err != nil {
+		flow.Errors = append(flow.Errors, models.FlowError{
+			Field:   "user_info",
+			Message: "Failed to get user info",
+		})
+		h.FlowService.UpdateFlow(r.Context(), flow)
+		utils.JSONResponse(w, http.StatusOK, flow)
+		return
+	}
+
+	// Process OAuth login
+	_, accessToken, refreshToken, err := h.AuthService.ProcessOAuthLogin(r.Context(), provider, userInfo, token)
+	if err != nil {
+		flow.Errors = append(flow.Errors, models.FlowError{
+			Field:   "oauth_login",
+			Message: err.Error(),
+		})
+		h.FlowService.UpdateFlow(r.Context(), flow)
+		utils.JSONResponse(w, http.StatusOK, flow)
+		return
+	}
+
+	// Update flow state to 'success'
+	flow.State = models.FlowStateSuccess
+	h.FlowService.UpdateFlow(r.Context(), flow)
+
+	// Redirect to the callback URL with tokens as query parameters
+	//todo return accessToken & refreshToken as cookies
+	redirectURL := fmt.Sprintf("%s?accessToken=%s&refreshToken=%s", callbackURL, accessToken, refreshToken)
+	http.Redirect(w, r, redirectURL, http.StatusFound)
+}
+
+func (h *FlowHandler) InitiateOAuthLoginFlow(w http.ResponseWriter, r *http.Request) {
+	provider := r.URL.Query().Get("provider")
+	callbackURL := r.URL.Query().Get("callback_url")
+	if provider == "" || callbackURL == "" {
+		utils.JSONError(w, http.StatusBadRequest, "Provider and callback URL are required")
+		return
+	}
+
+	requestURL := r.URL.String()
+	flow, err := h.FlowService.InitiateFlow(r.Context(), models.FlowTypeOAuth2Login, requestURL)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, "Failed to initiate OAuth login flow")
+		return
+	}
+
+	stateToken, err := h.AuthService.GenerateStateTokenWithFlowID(flow.ID, callbackURL)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, "Failed to generate state token")
+		return
+	}
+
+	loginURL, err := h.OAuth2Service.GetLoginURL(provider, stateToken)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, "Failed to get login URL")
+		return
+	}
+
+	// Update flow state to 'redirect_to_provider'
+	flow.State = models.FlowStateRedirectToProvider
+	err = h.FlowService.UpdateFlow(r.Context(), flow)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, "Failed to update flow state")
+		return
+	}
+
+	// Redirect the client to the provider's login URL
+	http.Redirect(w, r, loginURL, http.StatusFound)
 }
 
 func (h *FlowHandler) InitiateLoginFlow(w http.ResponseWriter, r *http.Request) {

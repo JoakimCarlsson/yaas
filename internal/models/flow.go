@@ -6,16 +6,18 @@ type FlowType string
 type FlowState string
 
 const (
-	FlowTypeLogin        FlowType = "login"
-	FlowTypeRegistration FlowType = "registration"
-
-	FlowStateEnterDetails FlowState = "enter_details"
-	FlowStateVerifyEmail  FlowState = "verify_email"
-
-	FlowStateChooseMethod     FlowState = "choose_method"
-	FlowStateEnterCredentials FlowState = "enter_credentials"
-	FlowStateSuccess          FlowState = "success"
-	FlowStateFailed           FlowState = "failed"
+	FlowTypeLogin               FlowType  = "login"
+	FlowTypeRegistration        FlowType  = "registration"
+	FlowStateEnterDetails       FlowState = "enter_details"
+	FlowStateVerifyEmail        FlowState = "verify_email"
+	FlowTypeOAuth2Login         FlowType  = "oauth2_login"
+	FlowStateRedirectToProvider FlowState = "redirect_to_provider"
+	FlowStateAwaitingCallback   FlowState = "awaiting_callback"
+	FlowStateProcessingCallback FlowState = "processing_callback"
+	FlowStateChooseMethod       FlowState = "choose_method"
+	FlowStateEnterCredentials   FlowState = "enter_credentials"
+	FlowStateSuccess            FlowState = "success"
+	FlowStateFailed             FlowState = "failed"
 )
 
 type FlowError struct {

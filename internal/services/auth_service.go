@@ -16,6 +16,7 @@ import (
 var stateSecret = []byte("your-secure-state-secret") //todo read from config, or use a secure random generator
 
 type StateClaims struct {
+	FlowID      string `json:"flow_id"`
 	CallbackURL string `json:"callback_url"`
 	jwt.RegisteredClaims
 }
@@ -26,8 +27,9 @@ type AuthService interface {
 	RefreshToken(ctx context.Context, refreshToken string) (string, string, error)
 	Logout(ctx context.Context, refreshToken string) error
 	GenerateStateToken(callbackURL string) (string, error)
-	ValidateStateToken(token string) (string, error)
+	ValidateStateToken(token string) (string, string, error)
 	ProcessOAuthLogin(ctx context.Context, provider string, userInfo map[string]interface{}, token *oauth2.Token) (*models.User, string, string, error)
+	GenerateStateTokenWithFlowID(flowID, callbackURL string) (string, error)
 }
 
 type authService struct {
@@ -44,6 +46,21 @@ func NewAuthService(userRepo repository.UserRepository, refreshRepo repository.R
 		jwtService:       jwtService,
 		oauth2Service:    oauth2Service,
 	}
+}
+
+func (s *authService) GenerateStateTokenWithFlowID(flowID, callbackURL string) (string, error) {
+	expirationTime := time.Now().Add(15 * time.Minute)
+
+	claims := &StateClaims{
+		FlowID:      flowID,
+		CallbackURL: callbackURL,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(stateSecret)
 }
 
 func (s *authService) Register(ctx context.Context, user *models.User, password string) error {
@@ -180,17 +197,17 @@ func (s *authService) GenerateStateToken(callbackURL string) (string, error) {
 	return token.SignedString(stateSecret)
 }
 
-func (s *authService) ValidateStateToken(tokenStr string) (string, error) {
+func (s *authService) ValidateStateToken(tokenStr string) (string, string, error) {
 	claims := &StateClaims{}
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
 		return stateSecret, nil
 	})
 
 	if err != nil || !token.Valid {
-		return "", errors.New("invalid or expired state token")
+		return "", "", errors.New("invalid or expired state token")
 	}
 
-	return claims.CallbackURL, nil
+	return claims.FlowID, claims.CallbackURL, nil
 }
 
 func (s *authService) ProcessOAuthLogin(ctx context.Context, provider string, userInfo map[string]interface{}, token *oauth2.Token) (*models.User, string, string, error) {
