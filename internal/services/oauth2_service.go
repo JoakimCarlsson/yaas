@@ -4,62 +4,90 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/joakimcarlsson/yaas/internal/config"
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 )
 
 type OAuth2Service interface {
-	GetGoogleLoginURL(state string) string
-	ExchangeCodeForToken(code string) (*oauth2.Token, error)
-	GetGoogleUserInfo(token *oauth2.Token) (map[string]interface{}, error)
+	GetLoginURL(provider, state string) (string, error)
+	ExchangeCodeForToken(provider, code string) (*oauth2.Token, error)
+	GetUserInfo(provider string, token *oauth2.Token) (map[string]interface{}, error)
 }
 
 type oauth2Service struct {
-	config      *config.Config
-	oauthConfig *oauth2.Config
+	config *config.Config
 }
 
 func NewOAuth2Service(cfg *config.Config) OAuth2Service {
 	return &oauth2Service{
 		config: cfg,
-		oauthConfig: &oauth2.Config{
-			ClientID:     cfg.GoogleClientID,
-			ClientSecret: cfg.GoogleClientSecret,
-			RedirectURL:  cfg.GoogleRedirectURL,
-			Scopes: []string{
-				"https://www.googleapis.com/auth/userinfo.email",
-				"https://www.googleapis.com/auth/userinfo.profile",
-			},
-			Endpoint: google.Endpoint,
-		},
 	}
 }
 
-func (s *oauth2Service) GetGoogleLoginURL(state string) string {
-	return s.oauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
+func (s *oauth2Service) GetLoginURL(provider, state string) (string, error) {
+	providerConfig, ok := s.config.OAuthProviders[provider]
+	if !ok {
+		return "", errors.New("unsupported provider: " + provider)
+	}
+
+	oauthConfig := &oauth2.Config{
+		ClientID:     providerConfig.ClientID,
+		ClientSecret: providerConfig.ClientSecret,
+		RedirectURL:  providerConfig.RedirectURL,
+		Scopes:       providerConfig.Scopes,
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  providerConfig.AuthURL,
+			TokenURL: providerConfig.TokenURL,
+		},
+	}
+
+	fmt.Println(oauthConfig.RedirectURL)
+
+	return oauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline), nil
 }
 
-func (s *oauth2Service) ExchangeCodeForToken(code string) (*oauth2.Token, error) {
-	return s.oauthConfig.Exchange(context.Background(), code)
+func (s *oauth2Service) ExchangeCodeForToken(provider, code string) (*oauth2.Token, error) {
+	providerConfig, ok := s.config.OAuthProviders[provider]
+	if !ok {
+		return nil, errors.New("unsupported provider: " + provider)
+	}
+
+	oauthConfig := &oauth2.Config{
+		ClientID:     providerConfig.ClientID,
+		ClientSecret: providerConfig.ClientSecret,
+		RedirectURL:  providerConfig.RedirectURL,
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  providerConfig.AuthURL,
+			TokenURL: providerConfig.TokenURL,
+		},
+	}
+
+	return oauthConfig.Exchange(context.Background(), code)
 }
 
-func (s *oauth2Service) GetGoogleUserInfo(token *oauth2.Token) (map[string]interface{}, error) {
-	client := s.oauthConfig.Client(context.Background(), token)
-	response, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+func (s *oauth2Service) GetUserInfo(provider string, token *oauth2.Token) (map[string]interface{}, error) {
+	providerConfig, ok := s.config.OAuthProviders[provider]
+	if !ok {
+		return nil, errors.New("unsupported provider: " + provider)
+	}
+
+	client := oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(token))
+
+	response, err := client.Get(providerConfig.UserInfoURL)
 	if err != nil {
 		return nil, err
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return nil, errors.New("failed to get user info from Google")
+		return nil, errors.New("failed to get user info from " + provider)
 	}
 
-	contents, err := ioutil.ReadAll(response.Body)
+	contents, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -69,5 +97,45 @@ func (s *oauth2Service) GetGoogleUserInfo(token *oauth2.Token) (map[string]inter
 		return nil, err
 	}
 
+	if provider == "github" {
+		if email, ok := userInfo["email"].(string); !ok || email == "" {
+			email, err := s.getGitHubUserEmail(client)
+			if err != nil {
+				return nil, err
+			}
+			userInfo["email"] = email
+		}
+	}
+
 	return userInfo, nil
+}
+
+func (s *oauth2Service) getGitHubUserEmail(client *http.Client) (string, error) {
+	response, err := client.Get("https://api.github.com/user/emails")
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return "", errors.New("failed to fetch GitHub user emails")
+	}
+
+	var emails []struct {
+		Email    string `json:"email"`
+		Primary  bool   `json:"primary"`
+		Verified bool   `json:"verified"`
+	}
+
+	if err := json.NewDecoder(response.Body).Decode(&emails); err != nil {
+		return "", err
+	}
+
+	for _, email := range emails {
+		if email.Primary && email.Verified {
+			return email.Email, nil
+		}
+	}
+
+	return "", errors.New("no primary, verified email found for GitHub user")
 }

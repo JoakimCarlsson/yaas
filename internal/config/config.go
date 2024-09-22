@@ -6,6 +6,16 @@ import (
 	"time"
 )
 
+type OAuthProviderConfig struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+	Scopes       []string
+	AuthURL      string
+	TokenURL     string
+	UserInfoURL  string
+}
+
 type Config struct {
 	PostgresHost          string
 	PostgresUser          string
@@ -19,12 +29,34 @@ type Config struct {
 	JWTRefreshTokenExpiry time.Duration
 	ServerPort            string
 	BaseURL               string
-	GoogleClientID        string
-	GoogleClientSecret    string
-	GoogleRedirectURL     string
+	OAuthProviders        map[string]OAuthProviderConfig
 }
 
 func Load() *Config {
+	providers := map[string]OAuthProviderConfig{
+		"google": {
+			ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+			ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+			RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
+			Scopes: []string{
+				"https://www.googleapis.com/auth/userinfo.email",
+				"https://www.googleapis.com/auth/userinfo.profile",
+			},
+			AuthURL:     "https://accounts.google.com/o/oauth2/v2/auth",
+			TokenURL:    "https://oauth2.googleapis.com/token",
+			UserInfoURL: "https://www.googleapis.com/oauth2/v2/userinfo",
+		},
+		"github": {
+			ClientID:     os.Getenv("GITHUB_CLIENT_ID"),
+			ClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
+			RedirectURL:  os.Getenv("GITHUB_REDIRECT_URL"),
+			Scopes:       []string{"user:email"},
+			AuthURL:      "https://github.com/login/oauth/authorize",
+			TokenURL:     "https://github.com/login/oauth/access_token",
+			UserInfoURL:  "https://api.github.com/user",
+		},
+	}
+
 	baseURL := os.Getenv("BASE_URL")
 	if baseURL == "" {
 		baseURL = fmt.Sprintf("http://localhost:%s", os.Getenv("SERVER_PORT"))
@@ -70,8 +102,6 @@ func Load() *Config {
 		JWTRefreshTokenExpiry: refreshTokenExpiry,
 		ServerPort:            os.Getenv("SERVER_PORT"),
 		BaseURL:               baseURL,
-		GoogleClientID:        os.Getenv("GOOGLE_CLIENT_ID"),
-		GoogleClientSecret:    os.Getenv("GOOGLE_CLIENT_SECRET"),
-		GoogleRedirectURL:     os.Getenv("GOOGLE_REDIRECT_URL"),
+		OAuthProviders:        providers,
 	}
 }
