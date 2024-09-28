@@ -53,15 +53,13 @@ func NewAuthService(userRepo repository.UserRepository, refreshRepo repository.R
 
 func (s *authService) ExecuteActions(ctx context.Context, actionType string, data map[string]interface{}) error {
 	ac := &executor.ActionContext{
-		Connection: data["connection"].(string),
+		Connection:  data["connection"].(string),
+		User:        map[string]interface{}{},
+		RequestInfo: data["request_info"].(map[string]interface{}),
 	}
 
 	if user, ok := data["user"].(map[string]interface{}); ok {
 		ac.User = user
-	}
-
-	if requestInfo, ok := data["request_info"].(map[string]interface{}); ok {
-		ac.RequestInfo = requestInfo
 	}
 
 	return s.actionExecutor.ExecuteActions(ctx, actionType, ac)
@@ -111,8 +109,6 @@ func (s *authService) Register(ctx context.Context, user *models.User, password 
 		},
 	}
 	if err := s.ExecuteActions(ctx, "post-register", postRegisterData); err != nil {
-		// Consider how to handle post-register action errors
-		// For now, we'll log the error but still return success
 		log.Printf("Post-register action error: %v", err)
 	}
 
