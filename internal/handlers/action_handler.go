@@ -7,7 +7,6 @@ import (
 	"github.com/joakimcarlsson/yaas/internal/utils"
 	"net/http"
 	"strconv"
-	"strings"
 )
 
 type ActionAdminHandler struct {
@@ -34,12 +33,8 @@ func (h *ActionAdminHandler) CreateAction(w http.ResponseWriter, r *http.Request
 }
 
 func (h *ActionAdminHandler) UpdateAction(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 3 {
-		utils.JSONError(w, http.StatusBadRequest, "Invalid URL")
-		return
-	}
-	id, err := strconv.Atoi(pathParts[len(pathParts)-1])
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		utils.JSONError(w, http.StatusBadRequest, "Invalid action ID")
 		return
@@ -61,12 +56,8 @@ func (h *ActionAdminHandler) UpdateAction(w http.ResponseWriter, r *http.Request
 }
 
 func (h *ActionAdminHandler) DeleteAction(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 3 {
-		utils.JSONError(w, http.StatusBadRequest, "Invalid URL")
-		return
-	}
-	id, err := strconv.Atoi(pathParts[len(pathParts)-1])
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		utils.JSONError(w, http.StatusBadRequest, "Invalid action ID")
 		return

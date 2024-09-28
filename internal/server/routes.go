@@ -15,67 +15,21 @@ func NewRouter(
 	actionHandler *handlers.ActionAdminHandler,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
-	limiter := middleware.NewRateLimiter(5 * time.Minute)
 
-	mux.HandleFunc("/register", limiter.RateLimit(authHandler.Register)) //todo add proper http.StatusMethodNotAllowed etc.
-	mux.HandleFunc("/login", limiter.RateLimit(authHandler.Login))
+	//rate limit somewhere else, such as a load-balancer etc.
+	mux.Handle("POST /register", middleware.NewRateLimiter(10*time.Second, 5).RateLimit(authHandler.Register))
+	mux.Handle("POST /login", middleware.NewRateLimiter(10*time.Second, 5).RateLimit(authHandler.Login))
+	mux.Handle("POST /logout", middleware.NewRateLimiter(10*time.Second, 5).RateLimit(tokenHandler.Logout))
+	mux.Handle("POST /refresh_token", middleware.NewRateLimiter(10*time.Second, 5).RateLimit(tokenHandler.RefreshToken))
 
-	mux.HandleFunc("/logout", limiter.RateLimit(tokenHandler.Logout))
-	mux.HandleFunc("/refresh_token", limiter.RateLimit(tokenHandler.RefreshToken))
+	mux.Handle("GET /auth/login", middleware.NewRateLimiter(10*time.Second, 5).RateLimit(oauthHandler.OAuthLogin))
+	mux.Handle("GET /auth/callback", middleware.NewRateLimiter(10*time.Second, 5).RateLimit(oauthHandler.OAuthCallback))
 
-	mux.HandleFunc("/auth/login", limiter.RateLimit(oauthHandler.OAuthLogin))
-	mux.HandleFunc("/auth/callback", limiter.RateLimit(oauthHandler.OAuthCallback))
-
-	mux.HandleFunc("/actions", limiter.RateLimit(func(w http.ResponseWriter, r *http.Request) {
-		// Handle preflight requests
-		if r.Method == http.MethodOptions {
-			handlePreflight(w, r)
-			return
-		}
-
-		// Set CORS headers for actual requests
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		switch r.Method {
-		case http.MethodGet:
-			actionHandler.GetActions(w, r)
-		case http.MethodPost:
-			actionHandler.CreateAction(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	}))
-
-	mux.HandleFunc("/actions/", limiter.RateLimit(func(w http.ResponseWriter, r *http.Request) {
-		// Handle preflight requests
-		if r.Method == http.MethodOptions {
-			handlePreflight(w, r)
-			return
-		}
-
-		// Set CORS headers for actual requests
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		switch r.Method {
-		case http.MethodPut:
-			actionHandler.UpdateAction(w, r)
-		case http.MethodDelete:
-			actionHandler.DeleteAction(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	}))
+	actionLimiter := middleware.NewRateLimiter(5*time.Second, 10)
+	mux.Handle("GET /actions", actionLimiter.RateLimit(actionHandler.GetActions))
+	mux.Handle("POST /actions", actionLimiter.RateLimit(actionHandler.CreateAction))
+	mux.Handle("PUT /actions/{id}", actionLimiter.RateLimit(actionHandler.UpdateAction))
+	mux.Handle("DELETE /actions/{id}", actionLimiter.RateLimit(actionHandler.DeleteAction))
 
 	return mux
-}
-
-func handlePreflight(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	w.WriteHeader(http.StatusNoContent)
 }
