@@ -3,7 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"github.com/joakimcarlsson/yaas/internal/models"
-	"github.com/joakimcarlsson/yaas/internal/repository"
+	"github.com/joakimcarlsson/yaas/internal/services"
 	"github.com/joakimcarlsson/yaas/internal/utils"
 	"net/http"
 	"strconv"
@@ -11,26 +11,11 @@ import (
 )
 
 type ActionAdminHandler struct {
-	actionRepo repository.ActionRepository
+	actionService services.ActionService
 }
 
-func NewActionAdminHandler(actionRepo repository.ActionRepository) *ActionAdminHandler {
-	return &ActionAdminHandler{actionRepo: actionRepo}
-}
-
-func (h *ActionAdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.Method == http.MethodPost:
-		h.CreateAction(w, r)
-	case r.Method == http.MethodPut:
-		h.UpdateAction(w, r)
-	case r.Method == http.MethodDelete:
-		h.DeleteAction(w, r)
-	case r.Method == http.MethodGet:
-		h.GetActions(w, r)
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
+func NewActionAdminHandler(actionService services.ActionService) *ActionAdminHandler {
+	return &ActionAdminHandler{actionService: actionService}
 }
 
 func (h *ActionAdminHandler) CreateAction(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +25,7 @@ func (h *ActionAdminHandler) CreateAction(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.actionRepo.CreateAction(r.Context(), &action); err != nil {
+	if err := h.actionService.CreateAction(r.Context(), &action); err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, "Failed to create action")
 		return
 	}
@@ -67,7 +52,7 @@ func (h *ActionAdminHandler) UpdateAction(w http.ResponseWriter, r *http.Request
 	}
 	action.ID = id
 
-	if err := h.actionRepo.UpdateAction(r.Context(), &action); err != nil {
+	if err := h.actionService.UpdateAction(r.Context(), &action); err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, "Failed to update action")
 		return
 	}
@@ -87,7 +72,7 @@ func (h *ActionAdminHandler) DeleteAction(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.actionRepo.DeleteAction(r.Context(), id); err != nil {
+	if err := h.actionService.DeleteAction(r.Context(), id); err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, "Failed to delete action")
 		return
 	}
@@ -96,7 +81,7 @@ func (h *ActionAdminHandler) DeleteAction(w http.ResponseWriter, r *http.Request
 }
 
 func (h *ActionAdminHandler) GetActions(w http.ResponseWriter, r *http.Request) {
-	actions, err := h.actionRepo.GetAllActions(r.Context())
+	actions, err := h.actionService.GetAllActions(r.Context())
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, "Failed to fetch actions")
 		return
