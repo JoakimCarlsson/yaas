@@ -15,25 +15,21 @@ func NewRouter(
 	actionHandler *handlers.ActionAdminHandler,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
-	limiter := middleware.NewRateLimiter(5 * time.Minute)
 
-	// Auth routes
-	mux.Handle("POST /register", limiter.RateLimit(authHandler.Register))
-	mux.Handle("POST /login", limiter.RateLimit(authHandler.Login))
+	//rate limit somewhere else, such as a load-balancer etc.
+	mux.Handle("POST /register", middleware.NewRateLimiter(10*time.Second, 5).RateLimit(authHandler.Register))
+	mux.Handle("POST /login", middleware.NewRateLimiter(10*time.Second, 5).RateLimit(authHandler.Login))
+	mux.Handle("POST /logout", middleware.NewRateLimiter(10*time.Second, 5).RateLimit(tokenHandler.Logout))
+	mux.Handle("POST /refresh_token", middleware.NewRateLimiter(10*time.Second, 5).RateLimit(tokenHandler.RefreshToken))
 
-	// Token routes
-	mux.Handle("POST /logout", limiter.RateLimit(tokenHandler.Logout))
-	mux.Handle("POST /refresh_token", limiter.RateLimit(tokenHandler.RefreshToken))
+	mux.Handle("GET /auth/login", middleware.NewRateLimiter(10*time.Second, 5).RateLimit(oauthHandler.OAuthLogin))
+	mux.Handle("GET /auth/callback", middleware.NewRateLimiter(10*time.Second, 5).RateLimit(oauthHandler.OAuthCallback))
 
-	// OAuth routes
-	mux.Handle("GET /auth/login", limiter.RateLimit(oauthHandler.OAuthLogin))
-	mux.Handle("GET /auth/callback", limiter.RateLimit(oauthHandler.OAuthCallback))
-
-	// Actions routes
-	mux.Handle("GET /actions", limiter.RateLimit(actionHandler.GetActions))
-	mux.Handle("POST /actions", limiter.RateLimit(actionHandler.GetActions))
-	mux.Handle("PUT /actions/{id}", limiter.RateLimit(actionHandler.UpdateAction))
-	mux.Handle("DELETE /actions/{id}", limiter.RateLimit(actionHandler.DeleteAction))
+	actionLimiter := middleware.NewRateLimiter(5*time.Second, 10)
+	mux.Handle("GET /actions", actionLimiter.RateLimit(actionHandler.GetActions))
+	mux.Handle("POST /actions", actionLimiter.RateLimit(actionHandler.CreateAction))
+	mux.Handle("PUT /actions/{id}", actionLimiter.RateLimit(actionHandler.UpdateAction))
+	mux.Handle("DELETE /actions/{id}", actionLimiter.RateLimit(actionHandler.DeleteAction))
 
 	return mux
 }
