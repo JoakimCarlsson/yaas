@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/joakimcarlsson/yaas/internal/executor"
 	"github.com/joakimcarlsson/yaas/internal/services/oauth_providers"
 	"golang.org/x/oauth2"
@@ -361,18 +362,6 @@ func (s *authService) ValidateStateToken(tokenStr string) (string, error) {
 }
 
 func (s *authService) ProcessOAuthLogin(ctx context.Context, provider string, userInfo map[string]interface{}, token *oauth2.Token) (*models.User, string, string, error) {
-	preLoginData := map[string]interface{}{
-		"connection":   provider,
-		"request_info": userInfo,
-	}
-	preLoginResult, err := s.ExecuteActions(ctx, "pre-login", preLoginData)
-	if err != nil {
-		return nil, "", "", err
-	}
-	if !preLoginResult.Allow {
-		return nil, "", "", errors.New(preLoginResult.Message)
-	}
-
 	providerFactory := oauth_providers.OAuthProviderFactory{}
 	providerStrategy, err := providerFactory.GetProvider(provider)
 	if err != nil {
@@ -385,10 +374,27 @@ func (s *authService) ProcessOAuthLogin(ctx context.Context, provider string, us
 	}
 
 	client := oauth2.NewClient(ctx, oauth2.StaticTokenSource(token))
-
 	email, err := providerStrategy.GetEmail(userInfo, client)
 	if err != nil {
 		return nil, "", "", err
+	}
+
+	fmt.Println(email)
+	preLoginData := &executor.ActionContext{
+		Connection: provider,
+		User:       map[string]interface{}{},
+		RequestInfo: map[string]interface{}{
+			"email": email,
+			"ip":    "",
+		},
+	}
+
+	preLoginResult, err := s.actionExecutor.ExecuteActions(ctx, "pre-login", preLoginData)
+	if err != nil {
+		return nil, "", "", err
+	}
+	if !preLoginResult.Allow {
+		return nil, "", "", errors.New(preLoginResult.Message)
 	}
 
 	user, err := s.userRepo.GetUserByEmail(ctx, email)
