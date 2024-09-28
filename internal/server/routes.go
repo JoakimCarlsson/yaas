@@ -27,6 +27,17 @@ func NewRouter(
 	mux.HandleFunc("/auth/callback", limiter.RateLimit(oauthHandler.OAuthCallback))
 
 	mux.HandleFunc("/actions", limiter.RateLimit(func(w http.ResponseWriter, r *http.Request) {
+		// Handle preflight requests
+		if r.Method == http.MethodOptions {
+			handlePreflight(w, r)
+			return
+		}
+
+		// Set CORS headers for actual requests
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
 		switch r.Method {
 		case http.MethodGet:
 			actionHandler.GetActions(w, r)
@@ -38,6 +49,17 @@ func NewRouter(
 	}))
 
 	mux.HandleFunc("/actions/", limiter.RateLimit(func(w http.ResponseWriter, r *http.Request) {
+		// Handle preflight requests
+		if r.Method == http.MethodOptions {
+			handlePreflight(w, r)
+			return
+		}
+
+		// Set CORS headers for actual requests
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
 		switch r.Method {
 		case http.MethodPut:
 			actionHandler.UpdateAction(w, r)
@@ -49,4 +71,11 @@ func NewRouter(
 	}))
 
 	return mux
+}
+
+func handlePreflight(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.WriteHeader(http.StatusNoContent)
 }
