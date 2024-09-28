@@ -3,8 +3,10 @@ package services
 import (
 	"context"
 	"errors"
+	"github.com/joakimcarlsson/yaas/internal/executor"
 	"github.com/joakimcarlsson/yaas/internal/services/oauth_providers"
 	"golang.org/x/oauth2"
+	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -28,6 +30,7 @@ type AuthService interface {
 	GenerateStateToken(callbackURL string) (string, error)
 	ValidateStateToken(token string) (string, error)
 	ProcessOAuthLogin(ctx context.Context, provider string, userInfo map[string]interface{}, token *oauth2.Token) (*models.User, string, string, error)
+	ExecuteActions(ctx context.Context, actionType string, data map[string]interface{}) error
 }
 
 type authService struct {
@@ -35,18 +38,47 @@ type authService struct {
 	refreshTokenRepo repository.RefreshTokenRepository
 	jwtService       JWTService
 	oauth2Service    OAuth2Service
+	actionExecutor   *executor.ActionExecutor
 }
 
-func NewAuthService(userRepo repository.UserRepository, refreshRepo repository.RefreshTokenRepository, jwtService JWTService, oauth2Service OAuth2Service) AuthService {
+func NewAuthService(userRepo repository.UserRepository, refreshRepo repository.RefreshTokenRepository, jwtService JWTService, oauth2Service OAuth2Service, actionExecutor *executor.ActionExecutor) AuthService {
 	return &authService{
 		userRepo:         userRepo,
 		refreshTokenRepo: refreshRepo,
 		jwtService:       jwtService,
 		oauth2Service:    oauth2Service,
+		actionExecutor:   actionExecutor,
 	}
 }
 
+func (s *authService) ExecuteActions(ctx context.Context, actionType string, data map[string]interface{}) error {
+	ac := &executor.ActionContext{
+		Connection:  data["connection"].(string),
+		User:        map[string]interface{}{},
+		RequestInfo: data["request_info"].(map[string]interface{}),
+	}
+
+	if user, ok := data["user"].(map[string]interface{}); ok {
+		ac.User = user
+	}
+
+	return s.actionExecutor.ExecuteActions(ctx, actionType, ac)
+}
+
 func (s *authService) Register(ctx context.Context, user *models.User, password string) error {
+	preRegisterData := map[string]interface{}{
+		"user": map[string]interface{}{
+			"email": user.Email,
+		},
+		"connection": "password",
+		"request_info": map[string]interface{}{
+			"email": user.Email,
+		},
+	}
+	if err := s.ExecuteActions(ctx, "pre-register", preRegisterData); err != nil {
+		return err
+	}
+
 	existingUser, err := s.userRepo.GetUserByEmail(ctx, user.Email)
 	if err == nil && existingUser != nil {
 		return errors.New("user already exists")
@@ -62,10 +94,38 @@ func (s *authService) Register(ctx context.Context, user *models.User, password 
 	user.Provider = "password"
 	user.ProviderID = nil
 
-	return s.userRepo.CreateUser(ctx, user)
+	if err := s.userRepo.CreateUser(ctx, user); err != nil {
+		return err
+	}
+
+	postRegisterData := map[string]interface{}{
+		"user": map[string]interface{}{
+			"id":    user.ID,
+			"email": user.Email,
+		},
+		"connection": "password",
+		"request_info": map[string]interface{}{
+			"email": user.Email,
+		},
+	}
+	if err := s.ExecuteActions(ctx, "post-register", postRegisterData); err != nil {
+		log.Printf("Post-register action error: %v", err)
+	}
+
+	return nil
 }
 
 func (s *authService) Login(ctx context.Context, email, password string) (*models.User, string, string, error) {
+	preLoginData := map[string]interface{}{
+		"connection": "password",
+		"request_info": map[string]interface{}{
+			"email": email,
+		},
+	}
+	if err := s.ExecuteActions(ctx, "pre-login", preLoginData); err != nil {
+		return nil, "", "", err
+	}
+
 	user, err := s.userRepo.GetUserByEmail(ctx, email)
 	if err != nil {
 		return nil, "", "", errors.New("invalid email or password")
@@ -95,6 +155,20 @@ func (s *authService) Login(ctx context.Context, email, password string) (*model
 	user.UpdatedAt = now
 	if err := s.userRepo.UpdateUser(ctx, user); err != nil {
 		return nil, "", "", err
+	}
+
+	postLoginData := map[string]interface{}{
+		"user": map[string]interface{}{
+			"id":    user.ID,
+			"email": user.Email,
+		},
+		"connection": "password",
+		"request_info": map[string]interface{}{
+			"email": email,
+		},
+	}
+	if err := s.ExecuteActions(ctx, "post-login", postLoginData); err != nil {
+		log.Printf("Post-login action error: %v", err)
 	}
 
 	return user, accessToken, refreshToken, nil
@@ -194,6 +268,14 @@ func (s *authService) ValidateStateToken(tokenStr string) (string, error) {
 }
 
 func (s *authService) ProcessOAuthLogin(ctx context.Context, provider string, userInfo map[string]interface{}, token *oauth2.Token) (*models.User, string, string, error) {
+	preLoginData := map[string]interface{}{
+		"connection":   provider,
+		"request_info": userInfo,
+	}
+	if err := s.ExecuteActions(ctx, "pre-login", preLoginData); err != nil {
+		return nil, "", "", err
+	}
+
 	providerFactory := oauth_providers.OAuthProviderFactory{}
 	providerStrategy, err := providerFactory.GetProvider(provider)
 	if err != nil {
@@ -207,7 +289,6 @@ func (s *authService) ProcessOAuthLogin(ctx context.Context, provider string, us
 
 	client := oauth2.NewClient(ctx, oauth2.StaticTokenSource(token))
 
-	// Extract the email
 	email, err := providerStrategy.GetEmail(userInfo, client)
 	if err != nil {
 		return nil, "", "", err
@@ -240,7 +321,6 @@ func (s *authService) ProcessOAuthLogin(ctx context.Context, provider string, us
 		}
 	}
 
-	// Generate access and refresh tokens
 	accessToken, err := s.jwtService.GenerateAccessToken(user)
 	if err != nil {
 		return nil, "", "", err
@@ -253,6 +333,21 @@ func (s *authService) ProcessOAuthLogin(ctx context.Context, provider string, us
 
 	if err := s.refreshTokenRepo.Create(ctx, user.ID, jti, expiresAt); err != nil {
 		return nil, "", "", err
+	}
+
+	// Execute post-login actions
+	postLoginData := map[string]interface{}{
+		"user": map[string]interface{}{
+			"id":    user.ID,
+			"email": user.Email,
+		},
+		"connection":   provider,
+		"request_info": userInfo,
+	}
+	if err := s.ExecuteActions(ctx, "post-login", postLoginData); err != nil {
+		// Consider how to handle post-login action errors
+		// For now, we'll log the error but still return the tokens
+		log.Printf("Post-login action error: %v", err)
 	}
 
 	return user, accessToken, refreshToken, nil

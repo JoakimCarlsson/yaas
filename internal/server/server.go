@@ -2,6 +2,7 @@ package server
 
 import (
 	"database/sql"
+	"github.com/joakimcarlsson/yaas/internal/executor"
 	"github.com/joakimcarlsson/yaas/internal/handlers"
 	"github.com/joakimcarlsson/yaas/internal/middleware"
 	"github.com/joakimcarlsson/yaas/internal/services"
@@ -29,16 +30,21 @@ func NewServer(cfg *config.Config, db *sql.DB) *Server {
 
 	userRepo := postgres.NewUserRepository(db)
 	refreshTokenRepo := postgres.NewRefreshTokenRepository(db)
+	actionRepo := postgres.NewActionRepository(db)
+
+	actionExecutor := executor.NewActionExecutor(actionRepo)
 
 	jwtService := services.NewJWTService(cfg)
 	oauthService := services.NewOAuth2Service(cfg)
-	authService := services.NewAuthService(userRepo, refreshTokenRepo, jwtService, oauthService)
+	authService := services.NewAuthService(userRepo, refreshTokenRepo, jwtService, oauthService, actionExecutor)
+	actionService := services.NewActionService(actionRepo)
 
 	authHandler := handlers.NewAuthHandler(authService, oauthService)
 	oauthHandler := handlers.NewOAuthHandler(oauthService, authService)
 	tokenHandler := handlers.NewTokenHandler(authService)
+	actionHandler := handlers.NewActionAdminHandler(actionService)
 
-	routerWithMiddlewares := middleware.AuditLogMiddleware(NewRouter(authHandler, oauthHandler, tokenHandler))
+	routerWithMiddlewares := middleware.AuditLogMiddleware(NewRouter(authHandler, oauthHandler, tokenHandler, actionHandler))
 	routerWithMiddlewares = middleware.SecurityHeadersMiddleware(routerWithMiddlewares)
 
 	s.router = routerWithMiddlewares
