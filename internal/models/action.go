@@ -8,6 +8,7 @@ type Action struct {
 	Type      string
 	Code      string
 	IsActive  bool
+	Priority  int
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

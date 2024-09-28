@@ -17,22 +17,22 @@ func NewActionRepository(db *sql.DB) repository.ActionRepository {
 
 func (r *actionRepositoryPostgres) CreateAction(ctx context.Context, action *models.Action) error {
 	query := `
-		INSERT INTO actions (name, type, code, is_active)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO actions (name, type, code, is_active, priority)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, created_at, updated_at
 	`
-	return r.db.QueryRowContext(ctx, query, action.Name, action.Type, action.Code, action.IsActive).
+	return r.db.QueryRowContext(ctx, query, action.Name, action.Type, action.Code, action.IsActive, action.Priority).
 		Scan(&action.ID, &action.CreatedAt, &action.UpdatedAt)
 }
 
 func (r *actionRepositoryPostgres) GetActionByID(ctx context.Context, id int) (*models.Action, error) {
 	query := `
-		SELECT id, name, type, code, is_active, created_at, updated_at
+		SELECT id, name, type, code, is_active, priority, created_at, updated_at
 		FROM actions WHERE id = $1
 	`
 	action := &models.Action{}
 	err := r.db.QueryRowContext(ctx, query, id).
-		Scan(&action.ID, &action.Name, &action.Type, &action.Code, &action.IsActive, &action.CreatedAt, &action.UpdatedAt)
+		Scan(&action.ID, &action.Name, &action.Type, &action.Code, &action.IsActive, &action.Priority, &action.CreatedAt, &action.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -41,8 +41,10 @@ func (r *actionRepositoryPostgres) GetActionByID(ctx context.Context, id int) (*
 
 func (r *actionRepositoryPostgres) GetActionsByType(ctx context.Context, actionType string) ([]*models.Action, error) {
 	query := `
-		SELECT id, name, type, code, is_active, created_at, updated_at
-		FROM actions WHERE type = $1 AND is_active = true
+		SELECT id, name, type, code, is_active, priority, created_at, updated_at
+		FROM actions 
+		WHERE type = $1 AND is_active = true
+		ORDER BY priority
 	`
 	rows, err := r.db.QueryContext(ctx, query, actionType)
 	if err != nil {
@@ -53,7 +55,7 @@ func (r *actionRepositoryPostgres) GetActionsByType(ctx context.Context, actionT
 	var actions []*models.Action
 	for rows.Next() {
 		action := &models.Action{}
-		if err := rows.Scan(&action.ID, &action.Name, &action.Type, &action.Code, &action.IsActive, &action.CreatedAt, &action.UpdatedAt); err != nil {
+		if err := rows.Scan(&action.ID, &action.Name, &action.Type, &action.Code, &action.IsActive, &action.Priority, &action.CreatedAt, &action.UpdatedAt); err != nil {
 			return nil, err
 		}
 		actions = append(actions, action)
@@ -64,10 +66,10 @@ func (r *actionRepositoryPostgres) GetActionsByType(ctx context.Context, actionT
 func (r *actionRepositoryPostgres) UpdateAction(ctx context.Context, action *models.Action) error {
 	query := `
 		UPDATE actions
-		SET name = $1, type = $2, code = $3, is_active = $4, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $5
+		SET name = $1, type = $2, code = $3, is_active = $4, priority = $5, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $6
 	`
-	_, err := r.db.ExecContext(ctx, query, action.Name, action.Type, action.Code, action.IsActive, action.ID)
+	_, err := r.db.ExecContext(ctx, query, action.Name, action.Type, action.Code, action.IsActive, action.Priority, action.ID)
 	return err
 }
 
@@ -79,7 +81,7 @@ func (r *actionRepositoryPostgres) DeleteAction(ctx context.Context, id int) err
 
 func (r *actionRepositoryPostgres) GetAllActions(ctx context.Context) ([]*models.Action, error) {
 	query := `
-		SELECT id, name, type, code, is_active, created_at, updated_at
+		SELECT id, name, type, code, is_active, priority, created_at, updated_at
 		FROM actions
 	`
 	rows, err := r.db.QueryContext(ctx, query)
@@ -91,7 +93,7 @@ func (r *actionRepositoryPostgres) GetAllActions(ctx context.Context) ([]*models
 	var actions []*models.Action
 	for rows.Next() {
 		action := &models.Action{}
-		if err := rows.Scan(&action.ID, &action.Name, &action.Type, &action.Code, &action.IsActive, &action.CreatedAt, &action.UpdatedAt); err != nil {
+		if err := rows.Scan(&action.ID, &action.Name, &action.Type, &action.Code, &action.IsActive, &action.Priority, &action.CreatedAt, &action.UpdatedAt); err != nil {
 			return nil, err
 		}
 		actions = append(actions, action)
