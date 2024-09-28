@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/require"
@@ -20,92 +21,160 @@ type ActionContext struct {
 	RequestInfo map[string]interface{}
 }
 
+type ActionResult struct {
+	Allow   bool
+	User    map[string]interface{}
+	Error   error
+	Message string
+}
+
 type ActionExecutor struct {
 	actionRepo repository.ActionRepository
 	httpClient *http.Client
+}
+
+type actionAPI struct {
+	allowCalled   bool
+	denyCalled    bool
+	allow         bool
+	user          map[string]interface{}
+	error         error
+	message       string
+	loggingCalled bool
+}
+
+func (a *actionAPI) Allow() {
+	a.allowCalled = true
+	a.allow = true
+}
+
+func (a *actionAPI) Deny(message string) {
+	a.denyCalled = true
+	a.allow = false
+	a.message = message
+}
+
+func (a *actionAPI) SetUser(user map[string]interface{}) {
+	a.user = user
+}
+
+func (a *actionAPI) Log(message string) {
+	a.loggingCalled = true
+	logger.GetLogger().Info(message)
 }
 
 func NewActionExecutor(actionRepo repository.ActionRepository) *ActionExecutor {
 	return &ActionExecutor{actionRepo: actionRepo, httpClient: &http.Client{}}
 }
 
-func (ae *ActionExecutor) ExecuteActions(ctx context.Context, actionType string, ac *ActionContext) error {
+func (ae *ActionExecutor) ExecuteActions(ctx context.Context, actionType string, ac *ActionContext) (*ActionResult, error) {
 	actions, err := ae.actionRepo.GetActionsByType(ctx, actionType)
 	if err != nil {
-		return fmt.Errorf("failed to get actions: %w", err)
+		return nil, fmt.Errorf("failed to get actions: %w", err)
+	}
+
+	result := &ActionResult{
+		Allow: true,
+		User:  ac.User,
 	}
 
 	for _, action := range actions {
-		if err := ae.executeAction(ctx, action, ac); err != nil {
-			return fmt.Errorf("failed to execute action %s: %w", action.Name, err)
+		actionResult, err := ae.executeAction(action, ac)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute action %s: %w", action.Name, err)
+		}
+
+		result.Allow = result.Allow && actionResult.Allow
+		result.User = actionResult.User
+		if actionResult.Error != nil {
+			result.Error = actionResult.Error
+		}
+		if actionResult.Message != "" {
+			result.Message = actionResult.Message
+		}
+
+		if !result.Allow {
+			break
 		}
 	}
 
-	return nil
+	return result, nil
 }
 
-func (ae *ActionExecutor) executeAction(ctx context.Context, action *models.Action, ac *ActionContext) error {
+func (ae *ActionExecutor) executeAction(action *models.Action, ac *ActionContext) (*ActionResult, error) {
 	vm := goja.New()
-
 	registry := new(require.Registry)
 	registry.Enable(vm)
-
-	consoleLogger := func(call goja.FunctionCall) goja.Value {
-		logger.WithFields(logger.Fields{
-			"action": action.Name,
-			"params": call.Arguments,
-		})
-		return goja.Undefined()
+	errs := ae.setupEnvironment(vm)
+	if errs != nil {
+		return nil, fmt.Errorf("failed to setup environment: %w", errs)
 	}
 
-	if err := vm.Set("console", map[string]interface{}{
-		"log":   consoleLogger,
-		"error": consoleLogger,
-	}); err != nil {
-		return fmt.Errorf("failed to set custom console logger: %w", err)
-	}
-
-	if err := ae.setupEnvironment(vm, ctx); err != nil {
-		return fmt.Errorf("failed to setup environment: %w", err)
-	}
-
+	// Set up the action context
 	err := vm.Set("context", map[string]interface{}{
 		"user":         ac.User,
 		"connection":   ac.Connection,
 		"request_info": ac.RequestInfo,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to set context in JS runtime: %w", err)
+		return nil, fmt.Errorf("failed to set context in JS runtime: %w", err)
 	}
 
-	wrappedCode := fmt.Sprintf(`
-        const run = async () => {
-            try {
-                %s
-            } catch (error) {
-                console.error('Error in action execution:', error);
-                throw error;
-            }
-        };
-        run().catch(error => {
-            throw error;
-        });
-    `, action.Code)
+	actionAPI := &actionAPI{
+		allowCalled:   false,
+		denyCalled:    false,
+		allow:         true,
+		user:          ac.User,
+		error:         nil,
+		message:       "",
+		loggingCalled: false,
+	}
 
-	_, err = vm.RunString(wrappedCode)
+	err = vm.Set("yaas", map[string]interface{}{
+		"allow":   actionAPI.Allow,
+		"deny":    actionAPI.Deny,
+		"setUser": actionAPI.SetUser,
+		"log":     actionAPI.Log,
+	})
 	if err != nil {
-		if gojaErr, ok := err.(*goja.Exception); ok {
-			stackTrace := gojaErr.Value().ToString()
-			fmt.Printf("Goja error: %s\nStack trace: %s\n", err.Error(), stackTrace)
-		}
-		return fmt.Errorf("failed to execute action: %w", err)
+		return nil, fmt.Errorf("failed to set action API in JS runtime: %w", err)
 	}
 
-	return nil
+	// Execute the action code
+	_, err = vm.RunString(action.Code)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute action: %w", err)
+	}
+
+	// Check if allow or deny was called
+	if !actionAPI.allowCalled && !actionAPI.denyCalled {
+		return nil, errors.New("action must call either yaas.allow() or yaas.deny()")
+	}
+
+	return &ActionResult{
+		Allow:   actionAPI.allow,
+		User:    actionAPI.user,
+		Error:   actionAPI.error,
+		Message: actionAPI.message,
+	}, nil
 }
 
-func (ae *ActionExecutor) setupEnvironment(vm *goja.Runtime, ctx context.Context) error {
+func (ae *ActionExecutor) setupEnvironment(vm *goja.Runtime) error {
+	console := vm.NewObject()
+	if err := console.Set("log", func(call goja.FunctionCall) goja.Value {
+		for _, arg := range call.Arguments {
+			fmt.Println(arg.String())
+		}
+		return goja.Undefined()
+	}); err != nil {
+		return fmt.Errorf("failed to set console.log: %w", err)
+	}
+	if err := vm.Set("console", console); err != nil {
+		return fmt.Errorf("failed to set console: %w", err)
+	}
+
 	if err := vm.Set("fetch", func(call goja.FunctionCall) goja.Value {
+
 		return ae.fetchPolyfill(vm, call)
 	}); err != nil {
 		return fmt.Errorf("failed to set fetch: %w", err)
