@@ -158,11 +158,11 @@ func (s *authService) Login(ctx context.Context, email, password string) (*model
 		User:       map[string]interface{}{},
 		RequestInfo: map[string]interface{}{
 			"email": email,
-			"ip":    ctx.Value("ip").(string),
 		},
 	}
 
 	preLoginResult, err := s.actionExecutor.ExecuteActions(ctx, "pre-login", preLoginData)
+
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -188,7 +188,6 @@ func (s *authService) Login(ctx context.Context, email, password string) (*model
 		},
 		RequestInfo: map[string]interface{}{
 			"email": email,
-			"ip":    ctx.Value("ip").(string),
 		},
 	}
 
